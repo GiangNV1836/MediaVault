@@ -9,23 +9,35 @@ import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
+import java.util.concurrent.CompletableFuture
 
 /** Một thể hiện LibVLC dùng chung (khởi tạo plugin chậm). Giải phóng sau 15 giây không còn ai dùng. */
 object VlcHolder {
     private var inst: LibVLC? = null
     private var users = 0
     private val h = Handler(Looper.getMainLooper())
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "vlc-holder").apply { isDaemon = true }
+    }
     private val releaser = Runnable {
-        synchronized(VlcHolder) {
-            if (users == 0) { runCatching { inst?.release() }; inst = null }
+        io.execute {
+            synchronized(VlcHolder) {
+                if (users == 0) {
+                    runCatching { inst?.release() }
+                    inst = null
+                }
+            }
         }
     }
 
     @Synchronized
     fun acquire(ctx: Context): LibVLC {
         h.removeCallbacks(releaser)
+        val current = inst
+            ?: LibVLC(ctx.applicationContext, arrayListOf("--quiet", "--no-stats", "--no-sub-autodetect-file", "--no-osd"))
+                .also { inst = it }
         users++
-        return inst ?: LibVLC(ctx.applicationContext, arrayListOf("--quiet", "--no-stats", "--no-sub-autodetect-file", "--no-osd")).also { inst = it }
+        return current
     }
 
     @Synchronized
@@ -33,11 +45,29 @@ object VlcHolder {
         users = maxOf(0, users - 1)
         if (users == 0) h.postDelayed(releaser, 15_000)
     }
+
+    fun dispose(player: MediaPlayer?, fd: ParcelFileDescriptor?, attached: Boolean): CompletableFuture<Unit> {
+        val completed = CompletableFuture<Unit>()
+        io.execute {
+            runCatching { player?.stop() }
+            val release = Runnable {
+                if (attached) runCatching { player?.detachViews() }
+                io.execute {
+                    runCatching { player?.release() }
+                    done()
+                    runCatching { fd?.close() }
+                    completed.complete(Unit)
+                }
+            }
+            if (attached) h.post(release) else release()
+        }
+        return completed
+    }
 }
 
 /**
- * Bọc LibVLC: giải mã phần cứng (HW) trước; lỗi codec/không có hình thì tạo lại player ở chế độ phần mềm (SW)
- * và phát tiếp từ vị trí hiện tại. Mở file bằng FileDescriptor từ SAF. Không log, không hiển thị metadata.
+ * Backend dự phòng LibVLC. Chế độ giải mã được chọn rõ ràng; không tự chuyển sang phần mềm khi chậm hiện hình.
+ * Mở file bằng FileDescriptor từ SAF. Không log, không hiển thị metadata.
  */
 class VlcPlayerWrapper(private val ctx: Context) {
     private var libVlc: LibVLC? = null
@@ -47,10 +77,9 @@ class VlcPlayerWrapper(private val ctx: Context) {
     private var uri: Uri? = null
     private var startMs = 0L
     private var seeked = false
-    private var swTried = false
-    private var voutCount = 0
-    private var released = false
+    @Volatile private var released = false
     private var aspect = 0
+    @Volatile private var starting = false
     private val handler = Handler(Looper.getMainLooper())
 
     var onEnded: () -> Unit = {}
@@ -59,81 +88,145 @@ class VlcPlayerWrapper(private val ctx: Context) {
     val time: Long get() = mp?.time ?: 0L
     val length: Long get() = mp?.length ?: 0L
     val isPlaying: Boolean get() = mp?.isPlaying ?: false
+    val isLoading: Boolean get() = starting
 
     fun attach(l: VLCVideoLayout) { layout = l }
 
-    fun start(uri: Uri, startMs: Long) {
+    fun start(uri: Uri, startMs: Long, softwareDecode: Boolean = false) {
         this.uri = uri
         this.startMs = startMs
-        swTried = false
-        play(false)
+        play(softwareDecode)
     }
 
     private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
-    private var generation = 0
+    @Volatile private var generation = 0
+    private var cleanup: CompletableFuture<Unit>? = null
 
-    /** Mở FileDescriptor ở luồng nền rồi mới tạo player ở luồng chính. */
+    /** Mở file và chuẩn bị LibVLC/MediaPlayer ở luồng nền; chỉ gắn surface trên luồng giao diện. */
     private fun play(sw: Boolean) {
         if (released) return
         releasePlayer()
-        val u = uri ?: return
+        starting = true
+        val u = uri ?: run { starting = false; return }
         val gen = ++generation
+        val previousCleanup = cleanup
         io.execute {
-            val fd = try { ctx.contentResolver.openFileDescriptor(u, "r") } catch (e: Exception) { null }
+            try {
+                previousCleanup?.get()
+            } catch (e: Exception) {
+                handler.post {
+                    if (!released && gen == generation) {
+                        starting = false
+                        onError()
+                    }
+                }
+                return@execute
+            }
+            if (released || gen != generation) return@execute
+            val fd = try {
+                ctx.contentResolver.openFileDescriptor(u, "r")
+            } catch (e: Exception) {
+                null
+            }
+            if (fd == null) {
+                handler.post {
+                    if (!released && gen == generation) {
+                        starting = false
+                        onError()
+                    }
+                }
+                return@execute
+            }
+
+            var vlc: LibVLC? = null
+            var player: MediaPlayer? = null
+            var media: Media? = null
+            try {
+                val acquired = VlcHolder.acquire(ctx)
+                vlc = acquired
+                val createdPlayer = MediaPlayer(acquired)
+                player = createdPlayer
+                val openedMedia = Media(acquired, fd.fileDescriptor)
+                media = openedMedia
+                openedMedia.setHWDecoderEnabled(!sw, !sw)
+                if (sw) openedMedia.addOption(":avcodec-hw=none")
+                openedMedia.addOption(":file-caching=1000")
+                createdPlayer.setMedia(openedMedia)
+            } catch (e: Exception) {
+                runCatching { player?.release() }
+                if (vlc != null) VlcHolder.done()
+                runCatching { fd.close() }
+                handler.post {
+                    if (!released && gen == generation) {
+                        starting = false
+                        onError()
+                    }
+                }
+                return@execute
+            } finally {
+                media?.release()
+            }
+
+            val preparedVlc = vlc
+            val preparedPlayer = player
             handler.post {
-                if (released || gen != generation) { runCatching { fd?.close() }; return@post }
-                if (fd == null) { onError(); return@post }
-                startPlayer(fd, sw)
-            }
-        }
-    }
-
-    private fun startPlayer(fd: ParcelFileDescriptor, sw: Boolean) {
-        val l = layout ?: run { runCatching { fd.close() }; return }
-        pfd = fd
-        val vlc = VlcHolder.acquire(ctx)
-        libVlc = vlc
-        val p = MediaPlayer(vlc)
-        mp = p
-        p.attachViews(l, null, false, false)            // SurfaceView (không dùng TextureView)
-        val media = Media(vlc, fd.fileDescriptor)
-        media.setHWDecoderEnabled(!sw, false)
-        if (sw) media.addOption(":avcodec-hw=none")
-        media.addOption(":file-caching=500")
-        p.setMedia(media)
-        media.release()
-        voutCount = 0
-        seeked = false
-        applyAspect()
-        p.setEventListener { ev ->
-            when (ev.type) {
-                MediaPlayer.Event.Playing -> {
-                    if (!seeked && startMs > 0) { p.setTime(startMs); seeked = true }
-                    handler.postDelayed({ checkVideo(p, sw) }, 1800)
+                if (released || gen != generation) {
+                    cleanup = VlcHolder.dispose(preparedPlayer, fd, attached = false)
+                    return@post
                 }
-                MediaPlayer.Event.Vout -> voutCount = ev.voutCount
-                MediaPlayer.Event.EndReached -> handler.post { onEnded() }
-                MediaPlayer.Event.EncounteredError -> handler.post {
-                    if (mp === p && !sw && !swTried) { swTried = true; startMs = maxOf(startMs, p.time); play(true) }
-                    else onError()
+                val l = layout
+                if (l == null || preparedVlc == null || preparedPlayer == null) {
+                    cleanup = VlcHolder.dispose(preparedPlayer, fd, attached = false)
+                    if (l == null && !released) {
+                        starting = false
+                        onError()
+                    }
+                    return@post
                 }
-                else -> {}
+                pfd = fd
+                libVlc = preparedVlc
+                mp = preparedPlayer
+                try {
+                    preparedPlayer.attachViews(l, null, false, false)
+                    applyAspect()
+                    preparedPlayer.setEventListener { ev ->
+                        when (ev.type) {
+                            MediaPlayer.Event.Playing -> {
+                                starting = false
+                                if (!seeked && startMs > 0) {
+                                    preparedPlayer.setTime(startMs)
+                                    seeked = true
+                                }
+                            }
+                            MediaPlayer.Event.EndReached -> handler.post { onEnded() }
+                            MediaPlayer.Event.EncounteredError -> handler.post {
+                                if (mp === preparedPlayer) {
+                                    starting = false
+                                    onError()
+                                }
+                            }
+                            else -> {}
+                        }
+                    }
+                    preparedPlayer.play()
+                } catch (e: Exception) {
+                    starting = false
+                    runCatching { preparedPlayer.setEventListener(null) }
+                    mp = null
+                    libVlc = null
+                    pfd = null
+                    cleanup = VlcHolder.dispose(preparedPlayer, fd, attached = true)
+                    onError()
+                }
             }
-        }
-        p.play()
-    }
-
-    /** Không có hình sau vài giây dù có track video => chuyển sang giải mã phần mềm. */
-    private fun checkVideo(p: MediaPlayer, sw: Boolean) {
-        if (released || mp !== p || sw || swTried) return
-        if (p.videoTracksCount > 0 && voutCount == 0 && p.isPlaying) {
-            swTried = true
-            startMs = maxOf(startMs, p.time)
-            play(true)
         }
     }
 
     fun toggle() { mp?.let { if (it.isPlaying) it.pause() else it.play() } }
+    fun stopPlayback() {
+        generation++
+        releasePlayer()
+    }
     fun setRate(rate: Float) { mp?.setRate(rate) }
     fun seekTo(ms: Long) { mp?.setTime(ms.coerceAtLeast(0L)) }
     fun seekBy(delta: Long) { mp?.let { it.setTime((it.time + delta).coerceIn(0L, maxOf(it.length, 0L))) } }
@@ -153,20 +246,22 @@ class VlcPlayerWrapper(private val ctx: Context) {
 
     private fun releasePlayer() {
         handler.removeCallbacksAndMessages(null)
-        mp?.let {
-            runCatching { it.setEventListener(null) }
-            runCatching { it.stop() }
-            runCatching { it.detachViews() }
-            runCatching { it.release() }
-        }
+        starting = false
+        val oldPlayer = mp
+        val hadVlc = libVlc != null
+        val oldFd = pfd
         mp = null
-        if (libVlc != null) { VlcHolder.done(); libVlc = null }
-        runCatching { pfd?.close() }
+        libVlc = null
         pfd = null
+        if (oldPlayer != null) runCatching { oldPlayer.setEventListener(null) }
+        if (oldPlayer != null || hadVlc || oldFd != null) {
+            cleanup = VlcHolder.dispose(oldPlayer, oldFd, attached = oldPlayer != null)
+        }
     }
 
     fun release() {
         released = true
+        starting = false
         generation++
         releasePlayer()
         layout = null
