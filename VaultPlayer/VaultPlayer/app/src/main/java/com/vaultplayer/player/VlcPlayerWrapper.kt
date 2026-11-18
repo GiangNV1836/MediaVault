@@ -99,7 +99,7 @@ class VlcPlayerWrapper(private val ctx: Context) {
         val media = Media(vlc, fd.fileDescriptor)
         media.setHWDecoderEnabled(!sw, false)
         if (sw) media.addOption(":avcodec-hw=none")
-        media.addOption(":file-caching=2000")          // bộ đệm cho nguồn ngoài chậm (chỉnh 1500-3000 ms)
+        media.addOption(":file-caching=500")
         p.setMedia(media)
         media.release()
         voutCount = 0
@@ -109,7 +109,7 @@ class VlcPlayerWrapper(private val ctx: Context) {
             when (ev.type) {
                 MediaPlayer.Event.Playing -> {
                     if (!seeked && startMs > 0) { p.setTime(startMs); seeked = true }
-                    handler.postDelayed({ checkVideo(p, sw) }, 3500)
+                    handler.postDelayed({ checkVideo(p, sw) }, 1800)
                 }
                 MediaPlayer.Event.Vout -> voutCount = ev.voutCount
                 MediaPlayer.Event.EndReached -> handler.post { onEnded() }
@@ -134,6 +134,7 @@ class VlcPlayerWrapper(private val ctx: Context) {
     }
 
     fun toggle() { mp?.let { if (it.isPlaying) it.pause() else it.play() } }
+    fun setRate(rate: Float) { mp?.setRate(rate) }
     fun seekTo(ms: Long) { mp?.setTime(ms.coerceAtLeast(0L)) }
     fun seekBy(delta: Long) { mp?.let { it.setTime((it.time + delta).coerceIn(0L, maxOf(it.length, 0L))) } }
 

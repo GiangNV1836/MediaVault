@@ -115,51 +115,55 @@ fun MediaCard(
     shown: Boolean, autoShow: Boolean, onOpen: () -> Unit, onEditAlias: () -> Unit
 ) {
     val isVideo = row.mediaType == "VIDEO"
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth().combinedClickable(
-            onClick = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
-            onLongClick = { vm.toggleSelect(row.id) }
-        ),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            ThumbBox(
-                vm, row.id, isVideo, show = autoShow || shown, manual = !autoShow,
-                onToggleShow = { vm.toggleShown(row.id) },
-                onTap = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
-                modifier = Modifier.width(128.dp)
+    BoxWithConstraints {
+        val thumbWidth = (maxWidth * 0.36f).coerceIn(112.dp, 168.dp)
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth().combinedClickable(
+                onClick = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
+                onLongClick = { vm.toggleSelect(row.id) }
+            ),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
             )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(row.aliasName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (isVideo) Icons.Default.Movie else Icons.Default.Image, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        if (isVideo) (row.durationMs?.let { fmtDuration(it) } ?: "Video") else "Ảnh",
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline
-                    )
-                }
-                if (admin) {   // CHỈ Admin: đường dẫn thật ở danh sách quản lý (không bao giờ ở màn hình phát/xem ảnh)
-                    Text(row.relativePath, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-                Spacer(Modifier.height(4.dp))
-                TagChips(row.tagsCsv)
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (selectionMode) {
-                    Checkbox(checked = selected, onCheckedChange = { vm.toggleSelect(row.id) })
-                } else {
-                    IconButton(onClick = { vm.toggleFavorite(row.id, row.isFavorite) }) {
-                        Icon(
-                            if (row.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Yêu thích",
-                            tint = if (row.isFavorite) Color(0xFFE53935) else MaterialTheme.colorScheme.outline
+        ) {
+            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                ThumbBox(
+                    vm, row.id, isVideo, show = autoShow || shown, manual = !autoShow,
+                    onToggleShow = { vm.toggleShown(row.id) },
+                    onTap = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
+                    modifier = Modifier.width(thumbWidth)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(row.aliasName, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(if (isVideo) Icons.Default.Movie else Icons.Default.Image, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            if (isVideo) (row.durationMs?.let { fmtDuration(it) } ?: "Video") else "Ảnh",
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline
                         )
                     }
-                    if (admin) IconButton(onClick = onEditAlias) { Icon(Icons.Default.Edit, "Sửa tên ảo", Modifier.size(20.dp)) }
+                    if (admin) {
+                        // Chỉ Admin thấy đường dẫn thật; màn phát không bao giờ hiển thị.
+                        Text(row.relativePath, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    TagChips(row.tagsCsv)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (selectionMode) {
+                        Checkbox(checked = selected, onCheckedChange = { vm.toggleSelect(row.id) })
+                    } else {
+                        IconButton(onClick = { vm.toggleFavorite(row.id, row.isFavorite) }) {
+                            Icon(
+                                if (row.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Yêu thích",
+                                tint = if (row.isFavorite) Color(0xFFE53935) else MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        if (admin) IconButton(onClick = onEditAlias) { Icon(Icons.Default.Edit, "Sửa tên ảo", Modifier.size(20.dp)) }
+                    }
                 }
             }
         }

@@ -75,6 +75,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // Chỉ tag/playlist còn ít nhất một mục khả dụng mới hiện.
     val tagCounts: StateFlow<List<TagCount>> = roots.flatMapLatest { dao.tagCounts(it).throttleLatest(400) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val tagManagementCounts: StateFlow<List<TagCount>> = roots.flatMapLatest { dao.tagManagementCounts(it).throttleLatest(400) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val playlists: StateFlow<List<PlaylistUi>> =
         combine(dao.playlistsFlow(), roots, tagCounts, plTick) { pls, r, _, _ ->
             pls.mapNotNull { p -> repo.playlistCount(p, r).let { c -> if (c > 0) PlaylistUi(p, c) else null } }

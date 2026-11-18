@@ -34,7 +34,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -52,6 +51,7 @@ import com.vaultplayer.storage.PlaybackState
 import com.vaultplayer.util.fmtDuration
 import com.vaultplayer.viewer.ImageDecode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,7 +65,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 
 /**
  * Màn hình phát/xem toàn màn hình. CHỈ hiện tên ảo + tag (KHÔNG BAO GIỜ hiện tên file gốc, kể cả Admin).
- * Video: phát qua LibVLC, vuốt bị tắt (dùng nút Trước/Tiếp). Ảnh: vuốt trái/phải, zoom, kéo.
+ * Video phát qua LibVLC; vuốt trái/phải chuyển mục. Ảnh hỗ trợ vuốt, zoom và kéo.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -90,14 +90,14 @@ fun PlayerHost(vm: MainViewModel) {
     var fav by remember(curId) { mutableStateOf(false) }
     LaunchedEffect(entry) { fav = entry?.isFavorite ?: false }
 
-    // Toàn màn hình (ẩn thanh hệ thống)
+    // Ẩn status bar khi phát nhưng giữ thanh điều hướng để luôn thao tác được nút hệ thống.
     DisposableEffect(Unit) {
         val w = activity?.window
         val c = w?.let { WindowCompat.getInsetsController(it, view) }
         c?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        c?.hide(WindowInsetsCompat.Type.systemBars())
+        c?.hide(WindowInsetsCompat.Type.statusBars())
         onDispose {
-            c?.show(WindowInsetsCompat.Type.systemBars())
+            c?.show(WindowInsetsCompat.Type.statusBars())
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             PlaybackState.rootId.value = null
         }
@@ -126,7 +126,7 @@ fun PlayerHost(vm: MainViewModel) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         HorizontalPager(
             state = pager,
-            userScrollEnabled = entry?.mediaType != "VIDEO" && !zoomed,
+            userScrollEnabled = !zoomed,
             beyondViewportPageCount = 1,
             key = { q[it] },
             modifier = Modifier.fillMaxSize()
@@ -171,24 +171,35 @@ fun PlayerHost(vm: MainViewModel) {
         // Thanh dưới: hành động
         AnimatedVisibility(controls, Modifier.align(Alignment.BottomCenter)) {
             Row(
-                Modifier.fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
-                    .navigationBarsPadding().padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center
             ) {
-                IconButton(onClick = { go(-1) }, enabled = pager.currentPage > 0) { Icon(Icons.Default.SkipPrevious, "Trước", tint = Color.White) }
-                IconButton(onClick = { vm.toggleFavorite(curId, fav); fav = !fav }) {
-                    Icon(if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Yêu thích", tint = if (fav) Color(0xFFFF5252) else Color.White)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = Color.Black.copy(alpha = 0.76f),
+                    tonalElevation = 6.dp
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { go(-1) }, enabled = pager.currentPage > 0) { Icon(Icons.Default.SkipPrevious, "Trước", tint = Color.White) }
+                        IconButton(onClick = { vm.toggleFavorite(curId, fav); fav = !fav }) {
+                            Icon(if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Yêu thích", tint = if (fav) Color(0xFFFF5252) else Color.White)
+                        }
+                        IconButton(onClick = { tagIds = listOf(curId) }) { Icon(Icons.AutoMirrored.Filled.Label, "Gắn tag", tint = Color.White) }
+                        if (entry?.mediaType == "VIDEO") {
+                            IconButton(onClick = { aspect = (aspect + 1) % 4 }) { Icon(Icons.Default.AspectRatio, "Tỷ lệ khung hình", tint = Color.White) }
+                        }
+                        IconButton(onClick = {
+                            rotLocked = !rotLocked
+                            activity?.requestedOrientation = if (rotLocked) ActivityInfo.SCREEN_ORIENTATION_LOCKED else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        }) { Icon(if (rotLocked) Icons.Default.ScreenLockRotation else Icons.Default.ScreenRotation, "Khóa xoay", tint = Color.White) }
+                        IconButton(onClick = { go(1) }, enabled = pager.currentPage < q.lastIndex) { Icon(Icons.Default.SkipNext, "Tiếp theo", tint = Color.White) }
+                    }
                 }
-                IconButton(onClick = { tagIds = listOf(curId) }) { Icon(Icons.AutoMirrored.Filled.Label, "Gắn tag", tint = Color.White) }
-                if (entry?.mediaType == "VIDEO") {
-                    IconButton(onClick = { aspect = (aspect + 1) % 4 }) { Icon(Icons.Default.AspectRatio, "Tỷ lệ khung hình", tint = Color.White) }
-                }
-                IconButton(onClick = {
-                    rotLocked = !rotLocked
-                    activity?.requestedOrientation = if (rotLocked) ActivityInfo.SCREEN_ORIENTATION_LOCKED else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                }) { Icon(if (rotLocked) Icons.Default.ScreenLockRotation else Icons.Default.ScreenRotation, "Khóa xoay", tint = Color.White) }
-                IconButton(onClick = { go(1) }, enabled = pager.currentPage < q.lastIndex) { Icon(Icons.Default.SkipNext, "Tiếp theo", tint = Color.White) }
             }
         }
     }
@@ -207,9 +218,9 @@ private fun VideoPage(
     var playing by remember(m.id) { mutableStateOf(false) }
     var error by remember(m.id) { mutableStateOf(false) }
     var dragging by remember(m.id) { mutableStateOf(false) }
+    var fastForwarding by remember(m.id) { mutableStateOf(false) }
     var dragVal by remember(m.id) { mutableFloatStateOf(0f) }
     var showRestart by remember(m.id) { mutableStateOf(m.lastPositionMs > 5000) }
-    var widthPx by remember { mutableIntStateOf(1) }
     val compact = isCompactWidth()
 
     // Nhớ vị trí xem dở: ghi khi tạm dừng/dừng/xuống nền/chuyển mục (không ghi liên tục). <5s hoặc >95% => 0.
@@ -238,7 +249,7 @@ private fun VideoPage(
             if (was && !p) persist()
             was = p; playing = p
             PlaybackState.rootId.value = if (p) m.rootId else null     // nhường băng thông: hoãn quét/backup khi đang phát
-            delay(250)
+            delay(500)
         }
     }
     LaunchedEffect(len) { if (len > 0 && m.durationMs == null) vm.repo.setDuration(m.id, len) }
@@ -262,8 +273,40 @@ private fun VideoPage(
         // Lớp bắt cử chỉ phía trên (VLCVideoLayout không cần nhận chạm): chạm = hiện/ẩn điều khiển, chạm đúp = ±10 giây.
         Box(
             Modifier.fillMaxSize()
-                .pointerInput(m.id) { detectTapGestures(onTap = { onToggle() }, onDoubleTap = { o -> if (o.x < size.width / 2) player.seekBy(-10_000) else player.seekBy(10_000) }) }
+                .pointerInput(m.id) {
+                    detectTapGestures(
+                        onPress = {
+                            var fastForwardStarted = false
+                            coroutineScope {
+                                val holdJob = launch {
+                                    delay(viewConfiguration.longPressTimeoutMillis)
+                                    player.setRate(2f)
+                                    fastForwardStarted = true
+                                    fastForwarding = true
+                                }
+                                tryAwaitRelease()
+                                holdJob.cancel()
+                                if (fastForwardStarted) {
+                                    player.setRate(1f)
+                                    fastForwarding = false
+                                }
+                            }
+                        },
+                        onTap = { onToggle() },
+                        onDoubleTap = { o -> if (o.x < size.width / 2) player.seekBy(-10_000) else player.seekBy(10_000) },
+                        onLongPress = {}
+                    )
+                }
         )
+        if (fastForwarding) {
+            Surface(
+                modifier = Modifier.align(Alignment.Center),
+                color = Color.Black.copy(alpha = 0.65f),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Text("2×", Modifier.padding(horizontal = 20.dp, vertical = 10.dp), color = Color.White, style = MaterialTheme.typography.titleLarge)
+            }
+        }
         if (error) Text("Không phát được mục này", color = Color.White, modifier = Modifier.align(Alignment.Center))
         if (showRestart) {
             AssistChip(
@@ -272,27 +315,39 @@ private fun VideoPage(
                 modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 56.dp)
             )
         }
-        AnimatedVisibility(controls, Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset)) {
+        AnimatedVisibility(
+            controls,
+            Modifier.align(Alignment.BottomCenter).padding(
+                bottom = bottomInset + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            )
+        ) {
             val big = if (compact) 56.dp else 72.dp
-            Column(Modifier.fillMaxWidth().padding(horizontal = if (compact) 12.dp else 32.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(fmtDuration(if (dragging) dragVal.toLong() else pos), color = Color.White, style = MaterialTheme.typography.labelMedium)
-                    val max = len.coerceAtLeast(1L).toFloat()
-                    Slider(
-                        value = (if (dragging) dragVal else pos.toFloat()).coerceIn(0f, max),
-                        onValueChange = { dragging = true; dragVal = it },
-                        onValueChangeFinished = { player.seekTo(dragVal.toLong()); dragging = false },
-                        valueRange = 0f..max,
-                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
-                    )
-                    Text(fmtDuration(len), color = Color.White, style = MaterialTheme.typography.labelMedium)
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { player.seekBy(-10_000) }) { Icon(Icons.Default.Replay10, "Lùi 10 giây", tint = Color.White) }
-                    IconButton(onClick = { player.toggle() }, modifier = Modifier.size(big)) {
-                        Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Tạm dừng" else "Phát", tint = Color.White, modifier = Modifier.size(big - 12.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = if (compact) 12.dp else 32.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = Color.Black.copy(alpha = 0.74f),
+                tonalElevation = 6.dp
+            ) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(fmtDuration(if (dragging) dragVal.toLong() else pos), color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        val max = len.coerceAtLeast(1L).toFloat()
+                        Slider(
+                            value = (if (dragging) dragVal else pos.toFloat()).coerceIn(0f, max),
+                            onValueChange = { dragging = true; dragVal = it },
+                            onValueChangeFinished = { player.seekTo(dragVal.toLong()); dragging = false },
+                            valueRange = 0f..max,
+                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                        )
+                        Text(fmtDuration(len), color = Color.White, style = MaterialTheme.typography.labelMedium)
                     }
-                    IconButton(onClick = { player.seekBy(10_000) }) { Icon(Icons.Default.Forward10, "Tiến 10 giây", tint = Color.White) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { player.seekBy(-10_000) }) { Icon(Icons.Default.Replay10, "Lùi 10 giây", tint = Color.White) }
+                        IconButton(onClick = { player.toggle() }, modifier = Modifier.size(big)) {
+                            Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Tạm dừng" else "Phát", tint = Color.White, modifier = Modifier.size(big - 12.dp))
+                        }
+                        IconButton(onClick = { player.seekBy(10_000) }) { Icon(Icons.Default.Forward10, "Tiến 10 giây", tint = Color.White) }
+                    }
                 }
             }
         }

@@ -110,6 +110,13 @@ interface VaultDao {
     // ---- tag
     @Query("SELECT g.id AS id, g.name AS name, COUNT(m.id) AS cnt FROM tag g JOIN media_tag t ON t.tagId = g.id JOIN media_entry m ON m.id = t.mediaId WHERE m.isMissing = 0 AND m.rootId IN (:roots) GROUP BY g.id ORDER BY g.name COLLATE NOCASE")
     fun tagCounts(roots: List<Long>): Flow<List<TagCount>>
+    @Query(
+        "SELECT g.id AS id, g.name AS name, COUNT(m.id) AS cnt FROM tag g " +
+            "LEFT JOIN media_tag t ON t.tagId = g.id " +
+            "LEFT JOIN media_entry m ON m.id = t.mediaId AND m.isMissing = 0 AND m.rootId IN (:roots) " +
+            "GROUP BY g.id HAVING COUNT(m.id) > 0 OR COUNT(t.mediaId) = 0 ORDER BY g.name COLLATE NOCASE"
+    )
+    fun tagManagementCounts(roots: List<Long>): Flow<List<TagCount>>
     @Query("SELECT * FROM tag WHERE name = :n") suspend fun tagByName(n: String): Tag?
     @Query("SELECT * FROM tag") suspend fun allTags(): List<Tag>
     @Query("SELECT id FROM tag WHERE name IN (:names)") suspend fun tagIdsByNames(names: List<String>): List<Long>

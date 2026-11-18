@@ -10,6 +10,9 @@
 - Danh sách phân trang (Paging 3); tìm theo tag dùng tập con tính một lần (không EXISTS cho từng dòng).
 - Danh sách tag/playlist được throttle (tối đa 1 lần/0,4 giây) để không tính lại dồn dập khi nhập/quét hàng loạt.
 - PBKDF2 (PIN, mật khẩu backup) chạy ở luồng nền; khóa Keystore được lưu đệm; LibVLC dùng chung một thể hiện; FileDescriptor mở ở luồng nền.
+- Player dùng bộ đệm tệp 500 ms, kiểm tra fallback giải mã sau 1,8 giây và cập nhật trạng thái giao diện mỗi 500 ms; giữ thanh điều hướng Android hiển thị khi phát.
+- Player hỗ trợ vuốt chuyển mục, chạm đúp để tua ±10 giây và nhấn giữ để phát nhanh 2×; quản lý tag có thể tạo tag chưa gắn nội dung.
+- UI Material 3 dùng màu hệ thống, tab dưới trên màn hẹp/NavigationRail trên màn rộng, lưới và thẻ co giãn; các dialog thao tác có nút quay lại và danh sách có trạng thái tải/lỗi.
 - Gắn tag/yêu thích hàng loạt gói trong một transaction (một lần làm mới giao diện).
 - Giới hạn đã biết: một thư mục đơn chứa hàng trăm nghìn tệp sẽ tốn RAM khi quét lần đầu; bản backup rất lớn (hàng chục MB) tạm tốn RAM gấp 2-3 lần kích thước khi mã hóa; mở danh sách rất lớn có độ trễ ngắn khi dựng hàng đợi phát.
 

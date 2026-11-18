@@ -49,11 +49,12 @@ private fun fmtSize(b: Long): String = when {
 
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(8.dp))
-        content()
-        HorizontalDivider(Modifier.padding(top = 12.dp))
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(12.dp))
+            content()
+        }
     }
 }
 
@@ -108,7 +109,10 @@ fun SettingsScreen(vm: MainViewModel) {
         }
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Column(
+                Modifier.widthIn(max = 760.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Section("Hiển thị") {
                     SwitchRow("Tự hiện hình xem trước", autoShow) { autoShow = it; prefs.autoShowThumbs = it }
                     ChoiceRow("Bộ nhớ đệm hình xem trước (RAM)", listOf("32 MB" to 32, "64 MB" to 64, "96 MB" to 96), cacheMb) {
@@ -180,7 +184,7 @@ private fun PasswordSetDialog(onDismiss: () -> Unit, onSet: (String) -> Unit) {
     var b by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Mật khẩu backup") },
+        title = { DialogBackTitle("Mật khẩu backup", onDismiss) },
         text = {
             Column {
                 Text("Tối thiểu 8 ký tự, riêng với PIN Admin. Mất mật khẩu = không khôi phục được backup.", style = MaterialTheme.typography.bodySmall)
@@ -257,7 +261,7 @@ private fun SourcesSection(vm: MainViewModel) {
     packRoot?.let { r ->
         AlertDialog(
             onDismissRequest = { packRoot = null },
-            title = { Text("Gói thumbnail") },
+            title = { DialogBackTitle("Gói thumbnail", { packRoot = null }) },
             text = {
                 Column {
                     OutlinedButton(onClick = { scope.launch { vm.vault.packs.deleteOwn(r); vm.toast("Đã xóa gói thumbnail của nguồn này") }; packRoot = null }) { Text("Xóa gói của thiết bị này") }
@@ -328,7 +332,7 @@ private fun BackupSection(vm: MainViewModel, auto: Boolean, onAuto: (Boolean) ->
     list?.let { l ->
         AlertDialog(
             onDismissRequest = { list = null },
-            title = { Text(if (forDelete) "Chọn backup để xóa" else "Chọn backup để khôi phục") },
+            title = { DialogBackTitle(if (forDelete) "Chọn backup để xóa" else "Chọn backup để khôi phục") { list = null } },
             text = {
                 if (l.isEmpty()) Text("Không tìm thấy backup trên các nguồn đang kết nối.")
                 else LazyColumn(Modifier.heightIn(max = 320.dp)) {
@@ -367,7 +371,7 @@ private fun BackupSection(vm: MainViewModel, auto: Boolean, onAuto: (Boolean) ->
     if (c != null && pi != null) {
         AlertDialog(
             onDismissRequest = { ctx = null; info = null },
-            title = { Text("Khôi phục backup") },
+            title = { DialogBackTitle("Khôi phục backup") { ctx = null; info = null } },
             text = {
                 Column {
                     Text("Thiết bị: ${pi.label}")

@@ -1,14 +1,11 @@
 package com.vaultplayer.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
@@ -21,14 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
-import androidx.paging.PagingData
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.vaultplayer.data.MediaRow
-import kotlinx.coroutines.flow.Flow
 
 private val TAB_LABELS = listOf("Tất cả", "Playlist theo Tag", "Yêu thích")
+private val COMPACT_TAB_LABELS = listOf("Tất cả", "Tag", "Yêu thích")
 private fun tabIcon(i: Int) = when (i) { 0 -> Icons.Default.VideoLibrary; 1 -> Icons.AutoMirrored.Filled.PlaylistPlay; else -> Icons.Default.Favorite }
 
 @Composable
@@ -95,13 +91,14 @@ fun HomeScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
         },
         bottomBar = {
             if (compact) NavigationBar {
-                TAB_LABELS.forEachIndexed { i, l ->
+                TAB_LABELS.forEachIndexed { i, _ ->
                     NavigationBarItem(selected = tab == i, onClick = { vm.tab.value = i; vm.clearSelection() },
-                        icon = { Icon(tabIcon(i), null) }, label = { Text(l, maxLines = 1) })
+                        icon = { Icon(tabIcon(i), null) }, label = { Text(COMPACT_TAB_LABELS[i], maxLines = 1) })
                 }
             }
         },
-        snackbarHost = { SnackbarHost(snack) }
+        snackbarHost = { SnackbarHost(snack) },
+        containerColor = MaterialTheme.colorScheme.surface
     ) { pad ->
         Row(Modifier.padding(pad).fillMaxSize()) {
             if (!compact) NavigationRail {
@@ -142,10 +139,27 @@ private fun MediaGrid(
     val shown by vm.shown.collectAsStateWithLifecycle()
     val autoShow = vm.vault.prefs.autoShowThumbs
     var aliasEdit by remember { mutableStateOf<MediaRow?>(null) }
-    val empty = items.loadState.refresh is LoadState.NotLoading && items.itemCount == 0
-    if (empty) { EmptyState(Icons.Default.VideoLibrary, emptyText); return }
+    if (items.itemCount == 0) {
+        when (items.loadState.refresh) {
+            is LoadState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            is LoadState.Error -> Column(
+                Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.Default.CloudOff, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(40.dp))
+                Spacer(Modifier.height(8.dp))
+                Text("Không tải được danh sách", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = { items.retry() }) { Text("Thử lại") }
+            }
+            else -> EmptyState(Icons.Default.VideoLibrary, emptyText)
+        }
+        return
+    }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(320.dp),
+        columns = GridCells.Adaptive(300.dp),
         contentPadding = PaddingValues(12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -162,6 +176,7 @@ private fun MediaGrid(
     aliasEdit?.let { r -> TextInputDialog("Sửa tên ảo", "Tên ảo", r.aliasName, "Lưu", onDismiss = { aliasEdit = null }) { vm.editAlias(r.id, it); aliasEdit = null } }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AllTab(vm: MainViewModel) {
     val items = vm.allPaging.collectAsLazyPagingItems()
@@ -183,7 +198,11 @@ fun AllTab(vm: MainViewModel) {
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
         )
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             Filter.entries.forEach {
                 FilterChip(
                     selected = f == it, onClick = { vm.filter.value = it },
@@ -211,12 +230,17 @@ fun AllTab(vm: MainViewModel) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FavTab(vm: MainViewModel) {
     val items = vm.favPaging.collectAsLazyPagingItems()
     val admin by vm.admin.isAdmin.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Button(onClick = { vm.playFavorites(false) }, enabled = items.itemCount > 0) {
                 Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp)); Text("Phát tất cả")
             }
@@ -241,34 +265,38 @@ fun PlaylistTab(vm: MainViewModel) {
     var rename by remember { mutableStateOf<PlaylistUi?>(null) }
     var delete by remember { mutableStateOf<PlaylistUi?>(null) }
 
-    if (tags.isEmpty() && pls.isEmpty()) { EmptyState(Icons.AutoMirrored.Filled.PlaylistPlay, "Chưa có nội dung"); return }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (tags.isNotEmpty()) item {
+        item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Chọn tag", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { manage = true }) { Text("Quản lý tag") }
+                    Text("Tag trong thư viện", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { manage = true }) { Text("Quản lý / thêm tag") }
                 }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    tags.forEach { t ->
-                        FilterChip(
-                            selected = t.id in sel,
-                            onClick = { vm.selTags.value = if (t.id in sel) sel - t.id else sel + t.id },
-                            label = { Text("${t.name} (${t.cnt})") }
-                        )
+                if (tags.isEmpty()) {
+                    Text("Chưa có tag. Mở Quản lý / thêm tag để tạo danh sách.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        tags.forEach { t ->
+                            FilterChip(
+                                selected = t.id in sel,
+                                onClick = { vm.selTags.value = if (t.id in sel) sel - t.id else sel + t.id },
+                                label = { Text("${t.name} (${t.cnt})") }
+                            )
+                        }
                     }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FilterChip(selected = !all, onClick = { vm.matchAll.value = false }, label = { Text("Một trong các tag") })
-                    FilterChip(selected = all, onClick = { vm.matchAll.value = true }, label = { Text("Có tất cả tag") })
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Button(onClick = { vm.playTags(false) }, enabled = sel.isNotEmpty()) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp)); Text("Phát") }
-                    OutlinedButton(onClick = { vm.playTags(true) }, enabled = sel.isNotEmpty()) { Icon(Icons.Default.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Ngẫu nhiên") }
-                    OutlinedButton(onClick = { saveDlg = true }, enabled = sel.isNotEmpty()) { Text("Lưu thành playlist") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FilterChip(selected = !all, onClick = { vm.matchAll.value = false }, label = { Text("Một trong các tag") })
+                        FilterChip(selected = all, onClick = { vm.matchAll.value = true }, label = { Text("Có tất cả tag") })
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(onClick = { vm.playTags(false) }, enabled = sel.isNotEmpty()) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp)); Text("Phát") }
+                        OutlinedButton(onClick = { vm.playTags(true) }, enabled = sel.isNotEmpty()) { Icon(Icons.Default.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Ngẫu nhiên") }
+                        OutlinedButton(onClick = { saveDlg = true }, enabled = sel.isNotEmpty()) { Text("Lưu thành playlist") }
+                    }
                 }
             }
         }
+        if (pls.isEmpty()) item { Text("Chưa có playlist", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (pls.isNotEmpty()) {
             item { Text("Playlist", style = MaterialTheme.typography.titleMedium) }
             items(pls, key = { it.p.id }) { p ->

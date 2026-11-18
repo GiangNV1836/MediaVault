@@ -26,8 +26,11 @@ fun TagSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
     var text by remember { mutableStateOf("") }
     LaunchedEffect(ids) { checked = vm.commonTags(ids) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetMaxWidth = 640.dp) {
-        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).navigationBarsPadding()) {
-            Text(if (ids.size > 1) "Gắn tag cho ${ids.size} mục" else "Gắn tag", style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).navigationBarsPadding().imePadding()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Quay lại") }
+                Text(if (ids.size > 1) "Gắn tag cho ${ids.size} mục" else "Gắn tag", style = MaterialTheme.typography.titleMedium)
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = text, onValueChange = { text = it }, singleLine = true, label = { Text("Tìm hoặc tạo tag") },
@@ -68,8 +71,11 @@ fun PlaylistSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
     val pls by vm.playlists.collectAsStateWithLifecycle()
     var name by remember { mutableStateOf("") }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetMaxWidth = 640.dp) {
-        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).navigationBarsPadding()) {
-            Text("Thêm vào playlist", style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).navigationBarsPadding().imePadding()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Quay lại") }
+                Text("Thêm vào playlist", style = MaterialTheme.typography.titleMedium)
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Tạo playlist mới") },
@@ -96,20 +102,36 @@ fun PlaylistSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
 /** Quản lý tag: mọi người dùng xóa được tag; Admin thêm đổi tên/gộp. */
 @Composable
 fun TagManageDialog(vm: MainViewModel, admin: Boolean, onDismiss: () -> Unit) {
-    val tags by vm.tagCounts.collectAsStateWithLifecycle()
+    val tags by vm.tagManagementCounts.collectAsStateWithLifecycle()
     var del by remember { mutableStateOf<TagCount?>(null) }
     var ren by remember { mutableStateOf<TagCount?>(null) }
+    var newTag by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Quản lý tag") },
+        title = { DialogBackTitle("Quản lý tag", onDismiss) },
         text = {
-            if (tags.isEmpty()) Text("Chưa có tag")
-            else LazyColumn(Modifier.heightIn(max = 360.dp)) {
-                items(tags, key = { it.id }) { t ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${t.name} (${t.cnt})", Modifier.weight(1f))
-                        if (admin) IconButton(onClick = { ren = t }) { Icon(Icons.Default.Edit, "Đổi tên/gộp") }
-                        IconButton(onClick = { del = t }) { Icon(Icons.Default.Delete, "Xóa") }
+            Column {
+                OutlinedTextField(
+                    value = newTag,
+                    onValueChange = { newTag = it },
+                    singleLine = true,
+                    label = { Text("Tạo tag mới") },
+                    trailingIcon = {
+                        IconButton(enabled = newTag.isNotBlank(), onClick = {
+                            vm.createTag(newTag, emptyList()) { newTag = "" }
+                        }) { Icon(Icons.Default.Add, "Tạo tag") }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                if (tags.isEmpty()) Text("Chưa có tag")
+                else LazyColumn(Modifier.heightIn(max = 300.dp)) {
+                    items(tags, key = { it.id }) { t ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${t.name} (${t.cnt})", Modifier.weight(1f))
+                            if (admin) IconButton(onClick = { ren = t }) { Icon(Icons.Default.Edit, "Đổi tên/gộp") }
+                            IconButton(onClick = { del = t }) { Icon(Icons.Default.Delete, "Xóa") }
+                        }
                     }
                 }
             }

@@ -3,6 +3,7 @@ package com.vaultplayer.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,6 +40,14 @@ fun EmptyState(icon: ImageVector, text: String, hint: String? = null, modifier: 
     }
 }
 
+@Composable
+fun DialogBackTitle(title: String, onBack: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Quay lại") }
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+    }
+}
+
 /**
  * Ô nhập tag/alias: tắt tự sửa. Giới hạn: Compose không đặt được cờ no-personalized-learning cho IME;
  * không dùng kiểu Password vì sẽ làm hỏng gõ tiếng Việt có dấu. Bàn phím bên thứ ba vẫn có thể tự học.
@@ -52,7 +61,7 @@ fun TextInputDialog(
     var v by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { DialogBackTitle(title, onDismiss) },
         text = {
             OutlinedTextField(
                 value = v, onValueChange = { v = it }, label = { Text(label) }, singleLine = true,
@@ -75,7 +84,7 @@ fun TextInputDialog(
 fun ConfirmDialog(title: String, text: String, confirmLabel: String = "Đồng ý", onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { DialogBackTitle(title, onDismiss) },
         text = { Text(text) },
         confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
@@ -88,7 +97,7 @@ fun TypeConfirmDialog(title: String, text: String, word: String, onDismiss: () -
     var t by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { DialogBackTitle(title, onDismiss) },
         text = {
             Column {
                 Text(text)
@@ -154,7 +163,7 @@ fun AdminUnlockDialog(vault: Vault, canBio: Boolean, onBio: (() -> Unit) -> Unit
     val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Mở khóa Admin") },
+        title = { DialogBackTitle("Mở khóa Admin", onDismiss) },
         text = {
             Column {
                 OutlinedTextField(
