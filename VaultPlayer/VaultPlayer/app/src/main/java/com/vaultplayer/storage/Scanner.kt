@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
 /** Nguồn đang phát video: quét/backup/ghi gói thumbnail tạm dừng cho nguồn này. */
 object PlaybackState { val rootId = MutableStateFlow<Long?>(null) }
@@ -201,6 +202,37 @@ class Scanner(
 
     fun discardStaged() { staged.value = null }
 
+    private fun sourceCode(rootId: Long): String {
+        var value = (rootId - 1).coerceAtLeast(0)
+        val code = StringBuilder()
+        while (value >= 0) {
+            code.append(('A'.code + (value % 26).toInt()).toChar())
+            value = value / 26 - 1
+        }
+        return code.reverse().toString()
+    }
+
+    private suspend fun renumberAliases(rootId: Long) {
+        val entries = dao.aliasEntries(rootId)
+        if (entries.isEmpty()) return
+        db.withTransaction {
+            entries.forEachIndexed { index, entry ->
+                dao.setAlias(entry.id, "__mv_renumber_${rootId}_${index}_${UUID.randomUUID()}")
+            }
+            val code = sourceCode(rootId)
+            entries.forEachIndexed { index, entry ->
+                val base = (if (entry.mediaType == "VIDEO") "Clip " else "Ảnh ") + code + (index + 1)
+                var alias = base
+                var suffix = 2
+                while (dao.aliasExists(alias) > 0) {
+                    alias = "$base ($suffix)"
+                    suffix++
+                }
+                dao.setAlias(entry.id, alias)
+            }
+        }
+    }
+
     private suspend fun apply(st: Staged, full: Boolean, t0: Long) = withContext(LowPrio.dispatcher) {
         val rootId = st.rootId
         st.edits.chunked(500).forEach { b ->
@@ -228,6 +260,7 @@ class Scanner(
             lastScanMs = SystemClock.elapsedRealtime() - t0,
             lastScanMode = st.mode
         ))
+        renumberAliases(rootId)
     }
 
     /** Nhập PendingEntry -> MediaEntry theo lô (aliasName theo thứ tự đường dẫn), áp dụng dữ liệu từ backup nếu có. */
@@ -283,5 +316,6 @@ class Scanner(
         }
         val r = dao.root(root.id)
         if (r != null) dao.updateRoot(r.copy(pendingNewCount = dao.countPending(root.id), lastFileCount = dao.countActive(root.id)))
+        renumberAliases(root.id)
     }
 }

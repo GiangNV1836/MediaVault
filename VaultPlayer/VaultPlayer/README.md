@@ -17,6 +17,7 @@
 - Chọn một playlist để xem các mục bên trong theo trang, phát tiếp từ mục đã chọn hoặc phát toàn bộ/ngẫu nhiên.
 - Bộ chọn tag có danh sách tìm kiếm và checkbox để gắn/gỡ nhanh, tránh tạo trùng; quản lý tag dùng sheet gọn để thêm, tìm, đổi tên/gộp và xóa qua menu thao tác.
 - Lần quét đầy đủ đầu tiên của nguồn mới sẽ tự nhập các mục tìm thấy sau khi quét thành công.
+- Sau mỗi lần quét thành công hoặc nhập mục mới, tên ảo của toàn bộ media trong nguồn đó được đánh lại theo thứ tự đường dẫn; mã nguồn ổn định A/B/C... được dùng thay cho tên thư mục thật (ví dụ “Clip A1”). Tên ảo đã sửa thủ công trong nguồn sẽ bị thay thế.
 - UI Material 3 dùng màu hệ thống, tab dưới trên màn hẹp/NavigationRail trên màn rộng, lưới và thẻ co giãn; các dialog thao tác có nút quay lại và danh sách có trạng thái tải/lỗi.
 - Gắn tag/yêu thích hàng loạt gói trong một transaction (một lần làm mới giao diện).
 - Giới hạn đã biết: một thư mục đơn chứa hàng trăm nghìn tệp sẽ tốn RAM khi quét lần đầu; bản backup rất lớn (hàng chục MB) tạm tốn RAM gấp 2-3 lần kích thước khi mã hóa; mở danh sách rất lớn có độ trễ ngắn khi dựng hàng đợi phát.
