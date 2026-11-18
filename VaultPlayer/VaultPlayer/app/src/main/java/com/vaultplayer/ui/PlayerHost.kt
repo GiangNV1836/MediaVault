@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -28,6 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -647,18 +649,32 @@ private fun VideoPage(
                 bottom = bottomInset + safeBottom
             )
         ) {
-            val big = if (compact) 52.dp else 60.dp
-            val sideButton = if (compact) 36.dp else 40.dp
-            val sideGap = if (compact) 4.dp else 8.dp
-            val mainGap = if (compact) 10.dp else 14.dp
+            val big = if (compact) 50.dp else 58.dp
+            val sideButton = if (compact) 40.dp else 44.dp
+            val sideGap = if (compact) 10.dp else 14.dp
+            val mainGap = if (compact) 18.dp else 24.dp
+            val panelShape = RoundedCornerShape(24.dp)
             Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = if (compact) 12.dp else 32.dp),
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-                tonalElevation = 6.dp,
-                shadowElevation = 10.dp
+                modifier = Modifier.widthIn(max = if (portrait) 560.dp else 820.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = if (compact) 12.dp else 32.dp),
+                shape = panelShape,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
+                tonalElevation = 3.dp,
+                shadowElevation = 8.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
             ) {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Column(
+                    Modifier.background(
+                        Brush.verticalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.12f),
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                            )
+                        ),
+                        panelShape
+                    ).padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
                     if (portrait) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -690,45 +706,52 @@ private fun VideoPage(
                                 Icon(Icons.AutoMirrored.Filled.Label, "Gắn tag", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        Spacer(Modifier.height(6.dp))
-                        val max = len.coerceAtLeast(1L).toFloat()
+                        Spacer(Modifier.height(4.dp))
+                    }
+
+                    val max = len.coerceAtLeast(1L).toFloat()
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            fmtDuration(if (dragging) dragVal.toLong() else pos),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.widthIn(min = 34.dp)
+                        )
                         Slider(
                             value = (if (dragging) dragVal else pos.toFloat()).coerceIn(0f, max),
                             onValueChange = { dragging = true; dragVal = it },
                             onValueChangeFinished = { seekTo(dragVal.toLong()); dragging = false },
                             valueRange = 0f..max,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(fmtDuration(if (dragging) dragVal.toLong() else pos), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                            Text(fmtDuration(len), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                        }
-                    } else {
-                        val max = len.coerceAtLeast(1L).toFloat()
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(fmtDuration(if (dragging) dragVal.toLong() else pos), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                            Slider(
-                                value = (if (dragging) dragVal else pos.toFloat()).coerceIn(0f, max),
-                                onValueChange = { dragging = true; dragVal = it },
-                                onValueChangeFinished = { seekTo(dragVal.toLong()); dragging = false },
-                                valueRange = 0f..max,
-                                modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                            modifier = Modifier.weight(1f).height(36.dp).padding(horizontal = 8.dp),
+                            colors = SliderDefaults.colors(
+                                activeTrackColor = MaterialTheme.colorScheme.primary,
+                                inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                                thumbColor = MaterialTheme.colorScheme.primary
                             )
-                            Text(fmtDuration(len), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                        }
+                        )
+                        Text(
+                            fmtDuration(len),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.widthIn(min = 34.dp)
+                        )
                     }
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(6.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = onPrevious, enabled = canPrevious,
-                            modifier = Modifier.size(sideButton).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                            modifier = Modifier.size(sideButton).background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
+                            )
                         ) {
                             Icon(Icons.Default.SkipPrevious, "Trước", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canPrevious) 1f else 0.4f))
                         }
                         Spacer(Modifier.width(sideGap))
                         IconButton(
                             onClick = { seekBy(-10_000) },
-                            modifier = Modifier.size(sideButton).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                            modifier = Modifier.size(sideButton).background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
+                            )
                         ) { Icon(Icons.Default.Replay10, "Lùi 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
                         Spacer(Modifier.width(mainGap))
                         IconButton(
@@ -745,12 +768,16 @@ private fun VideoPage(
                         Spacer(Modifier.width(mainGap))
                         IconButton(
                             onClick = { seekBy(10_000) },
-                            modifier = Modifier.size(sideButton).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                            modifier = Modifier.size(sideButton).background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
+                            )
                         ) { Icon(Icons.Default.Forward10, "Tiến 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
                         Spacer(Modifier.width(sideGap))
                         IconButton(
                             onClick = onNext, enabled = canNext,
-                            modifier = Modifier.size(sideButton).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                            modifier = Modifier.size(sideButton).background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
+                            )
                         ) {
                             Icon(Icons.Default.SkipNext, "Tiếp theo", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canNext) 1f else 0.4f))
                         }

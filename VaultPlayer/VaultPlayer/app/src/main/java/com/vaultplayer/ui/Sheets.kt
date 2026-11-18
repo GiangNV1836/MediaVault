@@ -21,7 +21,7 @@ fun TagSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
     val allTags by vm.tagManagementCounts.collectAsStateWithLifecycle()
     var checked by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var text by remember { mutableStateOf("") }
-    var menuExpanded by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(true) }
     LaunchedEffect(ids) { checked = vm.commonTags(ids) }
     val matchingTags = allTags.filter { text.isBlank() || it.name.contains(text.trim(), ignoreCase = true) }
     val exactMatch = allTags.any { it.name.equals(text.trim(), ignoreCase = true) }
@@ -38,6 +38,7 @@ fun TagSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
                     onValueChange = { text = it; menuExpanded = true },
                     singleLine = true,
                     label = { Text("Tìm tag đã tạo") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
                     keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
                     trailingIcon = {
                         IconButton(onClick = { menuExpanded = !menuExpanded }) {
@@ -145,48 +146,93 @@ fun PlaylistSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
 }
 
 /** Quản lý tag: mọi người dùng xóa được tag; Admin thêm đổi tên/gộp. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TagManageDialog(vm: MainViewModel, admin: Boolean, onDismiss: () -> Unit) {
     val tags by vm.tagManagementCounts.collectAsStateWithLifecycle()
     var del by remember { mutableStateOf<TagCount?>(null) }
     var ren by remember { mutableStateOf<TagCount?>(null) }
     var newTag by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { DialogBackTitle("Quản lý tag", onDismiss) },
-        text = {
-            Column {
+    var search by remember { mutableStateOf("") }
+    val visibleTags = tags.filter { it.name.contains(search.trim(), ignoreCase = true) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetMaxWidth = 640.dp) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp)
+                .navigationBarsPadding().imePadding()
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Quay lại") }
+                Column(Modifier.weight(1f)) {
+                    Text("Quản lý tag", style = MaterialTheme.typography.titleLarge)
+                    Text("${tags.size} tag", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = onDismiss) { Text("Xong") }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = newTag,
                     onValueChange = { newTag = it },
                     singleLine = true,
-                    label = { Text("Tạo tag mới") },
-                    trailingIcon = {
-                        IconButton(enabled = newTag.isNotBlank(), onClick = {
-                            vm.createTag(newTag, emptyList()) { newTag = "" }
-                        }) { Icon(Icons.Default.Add, "Tạo tag") }
-                    },
-                    modifier = Modifier.fillMaxWidth()
+                    placeholder = { Text("Tạo tag mới") },
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
+                    modifier = Modifier.weight(1f)
                 )
-                Spacer(Modifier.height(8.dp))
-                if (tags.isEmpty()) Text("Chưa có tag")
-                else LazyColumn(Modifier.heightIn(max = 300.dp)) {
-                    items(tags, key = { it.id }) { t ->
-                        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("${t.name} (${t.cnt})", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                            if (admin) IconButton(onClick = { ren = t }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.Edit, "Đổi tên/gộp", Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                FilledIconButton(
+                    enabled = newTag.isNotBlank(),
+                    onClick = { vm.createTag(newTag, emptyList()) { newTag = "" } }
+                ) { Icon(Icons.Default.Add, "Tạo tag") }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it },
+                singleLine = true,
+                placeholder = { Text("Tìm tag") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = {
+                    if (search.isNotEmpty()) IconButton(onClick = { search = "" }) {
+                        Icon(Icons.Default.Close, "Xóa tìm kiếm")
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (visibleTags.isEmpty()) {
+                Text(
+                    if (search.isBlank()) "Chưa có tag" else "Không tìm thấy tag",
+                    Modifier.padding(vertical = 20.dp).align(Alignment.CenterHorizontally),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    items(visibleTags, key = { it.id }) { tag ->
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TagChip(tag.name)
+                            Text(
+                                "${tag.cnt} mục",
+                                Modifier.weight(1f).padding(start = 10.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (admin) IconButton(onClick = { ren = tag }, modifier = Modifier.size(40.dp)) {
+                                Icon(Icons.Default.Edit, "Đổi tên hoặc gộp tag", Modifier.size(18.dp))
                             }
-                            IconButton(onClick = { del = t }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.Delete, "Xóa", Modifier.size(18.dp))
+                            IconButton(onClick = { del = tag }, modifier = Modifier.size(40.dp)) {
+                                Icon(Icons.Default.DeleteOutline, "Xóa tag", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Đóng") } }
-    )
+        }
+    }
     del?.let { t -> ConfirmDialog("Xóa tag", "Xóa tag \"${t.name}\" khỏi ${t.cnt} mục?", "Xóa", { del = null }) { vm.deleteTag(t.id); del = null } }
     ren?.let { t -> TextInputDialog("Đổi tên / gộp tag", "Tên mới (trùng tên tag khác sẽ gộp)", t.name, "Lưu", onDismiss = { ren = null }) { vm.renameTag(t.id, it); ren = null } }
 }

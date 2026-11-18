@@ -146,7 +146,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun selectAll() = viewModelScope.launch {
         selection.value = when (tab.value) {
             0 -> dao.idsAll(roots.value, filter.value.type, if (filter.value == Filter.UNTAGGED) 1 else 0, query.value.trim())
-            2 -> dao.idsFav(roots.value)
+            3 -> dao.idsFav(roots.value)
             else -> emptyList()
         }.toSet()
     }

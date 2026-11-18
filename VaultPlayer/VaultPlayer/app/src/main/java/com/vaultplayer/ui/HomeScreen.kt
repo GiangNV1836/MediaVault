@@ -2,13 +2,19 @@ package com.vaultplayer.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
@@ -26,9 +32,15 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.vaultplayer.data.MediaRow
 
-private val TAB_LABELS = listOf("Tất cả", "Playlist", "Yêu thích")
-private val COMPACT_TAB_LABELS = listOf("Tất cả", "Playlist", "Yêu thích")
-private fun tabIcon(i: Int) = when (i) { 0 -> Icons.Default.VideoLibrary; 1 -> Icons.AutoMirrored.Filled.PlaylistPlay; else -> Icons.Default.Favorite }
+private val TAB_LABELS = listOf("Tất cả", "Tag", "Playlist", "Yêu thích")
+private fun tabIcon(i: Int) = when (i) {
+    0 -> Icons.Default.VideoLibrary
+    1 -> Icons.AutoMirrored.Filled.Label
+    2 -> Icons.AutoMirrored.Filled.PlaylistPlay
+    else -> Icons.Default.Favorite
+}
+
+private enum class MediaLayout { GRID, LIST }
 
 @Composable
 fun MainScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) {
@@ -74,7 +86,7 @@ fun HomeScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
         topBar = {
             if (sel.isNotEmpty()) {
                 TopAppBar(
-                    title = { Text("${sel.size} đã chọn", style = MaterialTheme.typography.titleLarge) },
+                    title = {                     Text("${sel.size} đã chọn", style = MaterialTheme.typography.titleLarge) },
                     navigationIcon = { IconButton(onClick = { vm.clearSelection() }) { Icon(Icons.Default.Close, "Bỏ chọn") } },
                     actions = {
                         IconButton(onClick = { vm.selectAll() }) { Icon(Icons.Default.SelectAll, "Chọn tất cả") }
@@ -122,9 +134,9 @@ fun HomeScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 tonalElevation = 4.dp
             ) {
-                TAB_LABELS.forEachIndexed { i, _ ->
+                TAB_LABELS.forEachIndexed { i, label ->
                     NavigationBarItem(selected = tab == i, onClick = { vm.tab.value = i; vm.clearSelection() },
-                        icon = { Icon(tabIcon(i), null) }, label = { Text(COMPACT_TAB_LABELS[i], maxLines = 1) })
+                        icon = { Icon(tabIcon(i), null) }, label = { Text(label, maxLines = 1) })
                 }
             }
         },
@@ -146,7 +158,8 @@ fun HomeScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 when (tab) {
                     0 -> AllTab(vm)
-                    1 -> PlaylistTab(vm)
+                    1 -> TagTab(vm)
+                    2 -> PlaylistTab(vm)
                     else -> FavTab(vm)
                 }
             }
@@ -174,37 +187,67 @@ private fun MediaGrid(
     val autoShow = vm.vault.prefs.autoShowThumbs
     var aliasEdit by remember { mutableStateOf<MediaRow?>(null) }
     var minCellDp by remember { mutableIntStateOf(vm.vault.prefs.gridMinCellDp) }
+    var layout by remember {
+        mutableStateOf(if (vm.vault.prefs.mediaListMode) MediaLayout.LIST else MediaLayout.GRID)
+    }
+    val currentCellSize = rememberUpdatedState(minCellDp)
+    val updateCellSize = rememberUpdatedState<(Int) -> Unit> { size ->
+        minCellDp = size.coerceIn(140, 300)
+        vm.vault.prefs.gridMinCellDp = minCellDp
+    }
+
+    val renderItem: @Composable (MediaRow) -> Unit = { row ->
+        MediaCard(
+            vm, row, admin, selectionMode = sel.isNotEmpty(), selected = row.id in sel,
+            shown = row.id in shown, autoShow = autoShow, listMode = layout == MediaLayout.LIST,
+            onOpen = { onOpen(row.id) },
+            onFavorite = { vm.toggleFavorite(row.id, row.isFavorite) },
+            onEditAlias = { aliasEdit = row }
+        )
+    }
+
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.GridView, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(6.dp))
-            IconButton(
-                onClick = {
-                    minCellDp = (minCellDp - 20).coerceAtLeast(140)
-                    vm.vault.prefs.gridMinCellDp = minCellDp
-                },
-                enabled = minCellDp > 140
-            ) { Icon(Icons.Default.ZoomOut, "Thu nhỏ ô lưới") }
-            Slider(
-                value = minCellDp.toFloat(),
-                onValueChange = {
-                    minCellDp = it.toInt()
-                    vm.vault.prefs.gridMinCellDp = minCellDp
-                },
-                valueRange = 140f..300f,
-                steps = 7,
-                modifier = Modifier.weight(1f)
+            Text(
+                if (layout == MediaLayout.GRID) "Lưới" else "Danh sách",
+                Modifier.weight(1f).padding(start = 8.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            IconButton(
-                onClick = {
-                    minCellDp = (minCellDp + 20).coerceAtMost(300)
-                    vm.vault.prefs.gridMinCellDp = minCellDp
-                },
-                enabled = minCellDp < 300
-            ) { Icon(Icons.Default.ZoomIn, "Phóng to ô lưới") }
+            IconToggleButton(
+                checked = layout == MediaLayout.GRID,
+                onCheckedChange = {
+                    layout = MediaLayout.GRID
+                    vm.vault.prefs.mediaListMode = false
+                }
+            ) { Icon(Icons.Default.GridView, "Hiển thị dạng lưới") }
+            IconToggleButton(
+                checked = layout == MediaLayout.LIST,
+                onCheckedChange = {
+                    layout = MediaLayout.LIST
+                    vm.vault.prefs.mediaListMode = true
+                }
+            ) { Icon(Icons.Default.ViewList, "Hiển thị dạng danh sách") }
+            if (layout == MediaLayout.GRID) {
+                IconButton(
+                    onClick = { updateCellSize.value(minCellDp - 20) },
+                    enabled = minCellDp > 140
+                ) { Icon(Icons.Default.ZoomOut, "Thu nhỏ ô lưới") }
+                Slider(
+                    value = minCellDp.toFloat(),
+                    onValueChange = { updateCellSize.value(it.toInt()) },
+                    valueRange = 140f..300f,
+                    steps = 7,
+                    modifier = Modifier.widthIn(min = 72.dp, max = 140.dp)
+                )
+                IconButton(
+                    onClick = { updateCellSize.value(minCellDp + 20) },
+                    enabled = minCellDp < 300
+                ) { Icon(Icons.Default.ZoomIn, "Phóng to ô lưới") }
+            }
         }
         if (items.itemCount == 0) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -223,19 +266,48 @@ private fun MediaGrid(
                 }
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minCellDp.dp),
-                contentPadding = PaddingValues(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.weight(1f).fillMaxWidth()
-            ) {
-                items(count = items.itemCount, key = items.itemKey { it.id }) { i ->
-                    val row = items[i]
-                    if (row != null) MediaCard(
-                        vm, row, admin, selectionMode = sel.isNotEmpty(), selected = row.id in sel,
-                        shown = row.id in shown, autoShow = autoShow, onOpen = { onOpen(row.id) }, onEditAlias = { aliasEdit = row }
-                    )
+            val pinchZoom = if (layout == MediaLayout.GRID) {
+                Modifier.pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var accumulatedZoom = 1f
+                        do {
+                            val event = awaitPointerEvent()
+                            if (event.changes.count { it.pressed } > 1) {
+                                accumulatedZoom *= event.calculateZoom()
+                                if (accumulatedZoom >= 1.15f || accumulatedZoom <= 0.87f) {
+                                    updateCellSize.value((currentCellSize.value * accumulatedZoom).toInt())
+                                    accumulatedZoom = 1f
+                                }
+                                event.changes.forEach { if (it.pressed) it.consume() }
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                }
+            } else Modifier
+            if (layout == MediaLayout.GRID) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minCellDp.dp),
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth().then(pinchZoom)
+                ) {
+                    items(count = items.itemCount, key = items.itemKey { it.id }) {
+                        val row = items[it]
+                        if (row != null) renderItem(row)
+                    }
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                ) {
+                    items(count = items.itemCount, key = items.itemKey { it.id }) {
+                        val row = items[it]
+                        if (row != null) renderItem(row)
+                    }
                 }
             }
         }
@@ -326,69 +398,208 @@ fun FavTab(vm: MainViewModel) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PlaylistTab(vm: MainViewModel) {
+fun TagTab(vm: MainViewModel) {
     val tags by vm.tagCounts.collectAsStateWithLifecycle()
     val sel by vm.selTags.collectAsStateWithLifecycle()
     val all by vm.matchAll.collectAsStateWithLifecycle()
-    val pls by vm.playlists.collectAsStateWithLifecycle()
     val admin by vm.admin.isAdmin.collectAsStateWithLifecycle()
     var saveDlg by remember { mutableStateOf(false) }
     var manage by remember { mutableStateOf(false) }
-    var rename by remember { mutableStateOf<PlaylistUi?>(null) }
-    var delete by remember { mutableStateOf<PlaylistUi?>(null) }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Tag trong thư viện", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { manage = true }) { Text("Quản lý / thêm tag") }
-                }
-                if (tags.isEmpty()) {
-                    Text("Chưa có tag. Mở Quản lý / thêm tag để tạo danh sách.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        tags.forEach { t ->
-                            FilterChip(
-                                selected = t.id in sel,
-                                onClick = { vm.selTags.value = if (t.id in sel) sel - t.id else sel + t.id },
-                                label = { Text("${t.name} (${t.cnt})") }
-                            )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        FilterChip(selected = !all, onClick = { vm.matchAll.value = false }, label = { Text("Một trong các tag") })
-                        FilterChip(selected = all, onClick = { vm.matchAll.value = true }, label = { Text("Có tất cả tag") })
-                    }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Button(onClick = { vm.playTags(false) }, enabled = sel.isNotEmpty()) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp)); Text("Phát") }
-                        OutlinedButton(onClick = { vm.playTags(true) }, enabled = sel.isNotEmpty()) { Icon(Icons.Default.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Ngẫu nhiên") }
-                        OutlinedButton(onClick = { saveDlg = true }, enabled = sel.isNotEmpty()) { Text("Lưu thành playlist") }
-                    }
-                }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Thư viện tag", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Chọn một hoặc nhiều tag để lọc nội dung",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            FilledTonalButton(onClick = { manage = true }) {
+                Icon(Icons.Default.Tune, null)
+                Spacer(Modifier.width(6.dp))
+                Text("Quản lý")
             }
         }
-        if (pls.isEmpty()) item { Text("Chưa có playlist", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        if (pls.isNotEmpty()) {
-            item { Text("Playlist", style = MaterialTheme.typography.titleMedium) }
-            items(pls, key = { it.p.id }) { p ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(p.p.name, style = MaterialTheme.typography.titleSmall)
-                            Text("${p.count} mục", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+        Spacer(Modifier.height(16.dp))
+        if (tags.isEmpty()) {
+            EmptyState(
+                Icons.AutoMirrored.Filled.Label,
+                "Chưa có tag",
+                "Tạo tag để sắp xếp và lập playlist theo chủ đề.",
+                Modifier.weight(1f)
+            )
+        } else {
+            FlowRow(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                tags.forEach { tag ->
+                    FilterChip(
+                        selected = tag.id in sel,
+                        onClick = {
+                            vm.selTags.value = if (tag.id in sel) sel - tag.id else sel + tag.id
+                        },
+                        label = { Text("${tag.name} · ${tag.cnt}") },
+                        leadingIcon = if (tag.id in sel) {
+                            { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                        } else null
+                    )
+                }
+            }
+            if (sel.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    tonalElevation = 1.dp
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text("${sel.size} tag được chọn", style = MaterialTheme.typography.titleSmall)
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = !all, onClick = { vm.matchAll.value = false }, label = { Text("Khớp bất kỳ") })
+                            FilterChip(selected = all, onClick = { vm.matchAll.value = true }, label = { Text("Khớp tất cả") })
                         }
-                        IconButton(onClick = { vm.playPlaylist(p.p) }) { Icon(Icons.Default.PlayArrow, "Phát") }
-                        IconButton(onClick = { vm.playPlaylist(p.p, true) }) { Icon(Icons.Default.Shuffle, "Ngẫu nhiên") }
-                        IconButton(onClick = { rename = p }) { Icon(Icons.Default.Edit, "Đổi tên") }
-                        IconButton(onClick = { delete = p }) { Icon(Icons.Default.Delete, "Xóa") }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { vm.playTags(false) }) {
+                                Icon(Icons.Default.PlayArrow, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Phát")
+                            }
+                            OutlinedButton(onClick = { vm.playTags(true) }) {
+                                Icon(Icons.Default.Shuffle, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Ngẫu nhiên")
+                            }
+                            OutlinedButton(onClick = { saveDlg = true }) {
+                                Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Tạo playlist")
+                            }
+                        }
                     }
                 }
             }
         }
     }
-    if (saveDlg) TextInputDialog("Lưu thành playlist", "Tên playlist", "", "Lưu", onDismiss = { saveDlg = false }) { vm.savePlaylistFromTags(it); saveDlg = false }
+
+    if (saveDlg) {
+        TextInputDialog(
+            "Tạo playlist theo tag", "Tên playlist", "", "Tạo",
+            onDismiss = { saveDlg = false }
+        ) { vm.savePlaylistFromTags(it); saveDlg = false }
+    }
     if (manage) TagManageDialog(vm, admin) { manage = false }
-    rename?.let { p -> TextInputDialog("Đổi tên playlist", "Tên mới", p.p.name, "Lưu", onDismiss = { rename = null }) { vm.renamePlaylist(p.p.id, it); rename = null } }
-    delete?.let { p -> ConfirmDialog("Xóa playlist", "Xóa playlist \"${p.p.name}\"? (Không xóa video/ảnh)", "Xóa", { delete = null }) { vm.deletePlaylist(p.p.id); delete = null } }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaylistTab(vm: MainViewModel) {
+    val pls by vm.playlists.collectAsStateWithLifecycle()
+    var rename by remember { mutableStateOf<PlaylistUi?>(null) }
+    var delete by remember { mutableStateOf<PlaylistUi?>(null) }
+    var menuFor by remember { mutableStateOf<Long?>(null) }
+
+    if (pls.isEmpty()) {
+        EmptyState(
+            Icons.AutoMirrored.Filled.PlaylistPlay,
+            "Chưa có playlist",
+            "Chọn video trong Tất cả rồi nhấn biểu tượng playlist để tạo playlist thủ công."
+        )
+    } else {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                Column(Modifier.padding(bottom = 4.dp)) {
+                    Text("Playlist", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "${pls.size} danh sách phát",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            items(pls, key = { it.p.id }) { playlist ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    tonalElevation = 1.dp
+                ) {
+                    Row(
+                        Modifier.padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Icon(
+                                if (playlist.p.type == "TAG_FILTER") Icons.AutoMirrored.Filled.Label else Icons.AutoMirrored.Filled.PlaylistPlay,
+                                null,
+                                Modifier.padding(10.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(playlist.p.name, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                            Text(
+                                "${playlist.count} mục · ${if (playlist.p.type == "TAG_FILTER") "Theo tag" else "Tùy chỉnh"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { vm.playPlaylist(playlist.p) }) {
+                            Icon(Icons.Default.PlayArrow, "Phát playlist", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        Box {
+                            IconButton(onClick = { menuFor = playlist.p.id }) { Icon(Icons.Default.MoreVert, "Tùy chọn") }
+                            DropdownMenu(expanded = menuFor == playlist.p.id, onDismissRequest = { menuFor = null }) {
+                                DropdownMenuItem(
+                                    text = { Text("Phát ngẫu nhiên") },
+                                    leadingIcon = { Icon(Icons.Default.Shuffle, null) },
+                                    onClick = { vm.playPlaylist(playlist.p, true); menuFor = null }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Đổi tên") },
+                                    leadingIcon = { Icon(Icons.Default.Edit, null) },
+                                    onClick = { rename = playlist; menuFor = null }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Xóa playlist") },
+                                    leadingIcon = { Icon(Icons.Default.Delete, null) },
+                                    onClick = { delete = playlist; menuFor = null }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rename?.let { playlist ->
+        TextInputDialog("Đổi tên playlist", "Tên mới", playlist.p.name, "Lưu", onDismiss = { rename = null }) {
+            vm.renamePlaylist(playlist.p.id, it)
+            rename = null
+        }
+    }
+    delete?.let { playlist ->
+        ConfirmDialog(
+            "Xóa playlist",
+            "Xóa playlist \"${playlist.p.name}\"? (Không xóa video/ảnh)",
+            "Xóa",
+            { delete = null }
+        ) {
+            vm.deletePlaylist(playlist.p.id)
+            delete = null
+        }
+    }
 }

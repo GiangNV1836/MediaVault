@@ -5,7 +5,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,10 +15,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -27,9 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import com.vaultplayer.data.MediaRow
 import com.vaultplayer.util.fmtDuration
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun TagChip(name: String, compact: Boolean = false) {
@@ -53,46 +50,24 @@ fun TagChips(csv: String?, max: Int = 4) {
 
 /**
  * Ô hình xem trước: mặc định ô xám + con mắt. Bấm con mắt mới tải hình của đúng thẻ này.
- * Giữ ngón tay (video đã hiện hình): xem trước động 4 khung lật vòng ~0,5 giây.
  * Hình chỉ nằm trong RAM (xem ThumbRepository).
  */
 @Composable
 fun ThumbBox(
     vm: MainViewModel, id: Long, isVideo: Boolean, show: Boolean, manual: Boolean,
-    onToggleShow: () -> Unit, onTap: () -> Unit, modifier: Modifier = Modifier
+    onToggleShow: () -> Unit, modifier: Modifier = Modifier
 ) {
-    var preview by remember(id) { mutableStateOf<List<ImageBitmap>>(emptyList()) }
-    var pIdx by remember(id) { mutableIntStateOf(-1) }
     val bmp by produceState<ImageBitmap?>(null, id, show) {
         value = if (show) {
             if (!manual) delay(180)                       // tự hiện: chỉ bắt đầu khi cuộn chậm lại
             vm.thumbs.get(id)?.asImageBitmap()
         } else null
     }
-    LaunchedEffect(preview) {
-        if (preview.size > 1) { var i = 0; while (true) { pIdx = i % preview.size; delay(500); i++ } } else pIdx = -1
-    }
-    val img: ImageBitmap? = if (pIdx >= 0 && pIdx < preview.size) preview[pIdx] else bmp
 
     Box(
-        modifier.aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
-            .pointerInput(id, show) {
-                detectTapGestures(
-                    onTap = { onTap() },
-                    onPress = {
-                        if (show && isVideo) {
-                            coroutineScope {
-                                val j = launch { delay(450); preview = vm.thumbs.frames(id).map { it.asImageBitmap() } }
-                                tryAwaitRelease()
-                                j.cancel()
-                                preview = emptyList()
-                            }
-                        }
-                    }
-                )
-            }
+        modifier.clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
-        Crossfade(img, label = "thumb") { b ->
+        Crossfade(bmp, label = "thumb") { b ->
             if (b != null) Image(b, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             else Icon(
                 if (isVideo) Icons.Default.Movie else Icons.Default.Image, null,
@@ -112,102 +87,160 @@ fun ThumbBox(
 @Composable
 fun MediaCard(
     vm: MainViewModel, row: MediaRow, admin: Boolean, selectionMode: Boolean, selected: Boolean,
-    shown: Boolean, autoShow: Boolean, onOpen: () -> Unit, onEditAlias: () -> Unit
+    shown: Boolean, autoShow: Boolean, listMode: Boolean, onOpen: () -> Unit,
+    onFavorite: () -> Unit, onEditAlias: () -> Unit
 ) {
     val isVideo = row.mediaType == "VIDEO"
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth().combinedClickable(
-            onClick = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
-            onLongClick = { vm.toggleSelect(row.id) }
-        ),
-        shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp, pressedElevation = 3.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Column {
-            Box {
-                ThumbBox(
-                    vm, row.id, isVideo, show = autoShow || shown, manual = !autoShow,
-                    onToggleShow = { vm.toggleShown(row.id) },
-                    onTap = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
-                    modifier = Modifier.fillMaxWidth()
+    val cardModifier = Modifier.fillMaxWidth().combinedClickable(
+        onClick = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
+        onLongClick = { vm.toggleSelect(row.id) }
+    )
+
+    if (listMode) {
+        Row(
+            cardModifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                    else Color.Transparent,
+                    RoundedCornerShape(12.dp)
                 )
-                if (selectionMode) {
-                    Surface(
-                        modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-                    ) {
-                        Checkbox(checked = selected, onCheckedChange = { vm.toggleSelect(row.id) })
-                    }
+                .then(if (selected) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)) else Modifier)
+                .padding(vertical = 5.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MediaThumbnail(
+                vm, row, isVideo, shown, autoShow, selectionMode, selected,
+                selectionOverlay = false,
+                onFavorite = onFavorite,
+                modifier = Modifier.size(width = 108.dp, height = 72.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            MediaMetadata(row, admin, listMode, selected, Modifier.weight(1f))
+            if (!selectionMode) {
+                IconButton(onClick = onFavorite, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        if (row.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        "Yêu thích",
+                        Modifier.size(18.dp),
+                        tint = if (row.isFavorite) Color(0xFFFF5C7A) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
+            if (!selectionMode && admin) {
+                IconButton(onClick = onEditAlias, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Edit, "Sửa tên ảo", Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (selectionMode) {
+                Checkbox(checked = selected, onCheckedChange = { vm.toggleSelect(row.id) })
+            }
+        }
+    } else {
+        Column(
+            cardModifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else Color.Transparent)
+                .then(if (selected) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)) else Modifier)
+                .padding(3.dp)
+                .padding(bottom = 4.dp)
+        ) {
+            MediaThumbnail(
+                vm, row, isVideo, shown, autoShow, selectionMode, selected,
+                selectionOverlay = true,
+                onFavorite = onFavorite,
+                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+            )
             Row(
-                Modifier.fillMaxWidth().padding(start = 10.dp, end = 6.dp, top = 7.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.Top
+                Modifier.fillMaxWidth().padding(top = 7.dp, start = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(row.aliasName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(3.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            if (isVideo) Icons.Default.Movie else Icons.Default.Image,
-                            null,
-                            Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            if (isVideo) (row.durationMs?.let { fmtDuration(it) } ?: "Video") else "Ảnh",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            modifier = Modifier.weight(1f)
-                        )
-                        val tags = row.tagsCsv?.split(',')?.filter { it.isNotBlank() }.orEmpty()
-                        if (tags.isNotEmpty()) {
-                            Spacer(Modifier.width(6.dp))
-                            TagChip(tags.first(), compact = true)
-                            if (tags.size > 1) {
-                                Spacer(Modifier.width(3.dp))
-                                Text("+${tags.size - 1}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                            }
-                        }
-                    }
-                    if (admin) {
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            row.relativePath,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-                if (!selectionMode) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { vm.toggleFavorite(row.id, row.isFavorite) },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                if (row.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                "Yêu thích",
-                                tint = if (row.isFavorite) Color(0xFFE53935) else MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.size(19.dp)
-                            )
-                        }
-                        if (admin) {
-                            IconButton(onClick = onEditAlias, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.Edit, "Sửa tên ảo", Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                }
+                MediaMetadata(row, admin, listMode, selected, Modifier.weight(1f))
             }
+        }
+    }
+}
+
+@Composable
+private fun MediaThumbnail(
+    vm: MainViewModel,
+    row: MediaRow,
+    isVideo: Boolean,
+    shown: Boolean,
+    autoShow: Boolean,
+    selectionMode: Boolean,
+    selected: Boolean,
+    selectionOverlay: Boolean,
+    onFavorite: () -> Unit,
+    modifier: Modifier
+) {
+    Box {
+        ThumbBox(
+            vm, row.id, isVideo, show = autoShow || shown, manual = !autoShow,
+            onToggleShow = { vm.toggleShown(row.id) },
+            modifier = modifier
+        )
+        if (selectionMode && selectionOverlay) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = { vm.toggleSelect(row.id) },
+                modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(40.dp),
+                colors = CheckboxDefaults.colors(
+                    checkedColor = MaterialTheme.colorScheme.primary,
+                    uncheckedColor = Color.White
+                )
+            )
+        } else if (!selectionMode && selectionOverlay) {
+            IconButton(
+                onClick = onFavorite,
+                modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(36.dp)
+                    .background(Color.Black.copy(alpha = 0.38f), CircleShape)
+            ) {
+                Icon(
+                    if (row.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    "Yêu thích",
+                    tint = if (row.isFavorite) Color(0xFFFF5C7A) else Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediaMetadata(
+    row: MediaRow,
+    admin: Boolean,
+    listMode: Boolean,
+    selected: Boolean,
+    modifier: Modifier
+) {
+    val duration = if (row.mediaType == "VIDEO") row.durationMs?.let { fmtDuration(it) } ?: "Video" else "Ảnh"
+    val tags = row.tagsCsv?.split(',')?.filter { it.isNotBlank() }.orEmpty()
+    Column(modifier) {
+        Text(
+            row.aliasName,
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(duration, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            if (tags.isNotEmpty()) {
+                Text("  ·  ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                Text(
+                    tags.first() + if (tags.size > 1) " +${tags.size - 1}" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        if (admin && listMode) {
+            Text(row.relativePath, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

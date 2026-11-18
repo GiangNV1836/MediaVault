@@ -1,6 +1,9 @@
 package com.vaultplayer.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -12,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -24,6 +29,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.vaultplayer.DbState
 import com.vaultplayer.Vault
+
+@Composable
+private fun dialogInputColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
+)
 
 @Composable
 fun EmptyState(icon: ImageVector, text: String, hint: String? = null, modifier: Modifier = Modifier) {
@@ -45,8 +58,26 @@ fun EmptyState(icon: ImageVector, text: String, hint: String? = null, modifier: 
 @Composable
 fun DialogBackTitle(title: String, onBack: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Quay lại") }
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.size(38.dp)
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(38.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    "Quay lại",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            title,
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.titleLarge,
+            maxLines = 2
+        )
     }
 }
 
@@ -60,7 +91,13 @@ fun TextInputDialog(
     secret: Boolean = false, numeric: Boolean = false, error: String? = null,
     onDismiss: () -> Unit, onConfirm: (String) -> Unit
 ) {
-    var v by remember { mutableStateOf(initial) }
+    var v by remember(title, initial) { mutableStateOf(initial) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboard?.show()
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { DialogBackTitle(title, onDismiss) },
@@ -72,13 +109,25 @@ fun TextInputDialog(
                 visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = if (numeric) KeyboardType.NumberPassword else if (secret) KeyboardType.Password else KeyboardType.Text,
-                    autoCorrectEnabled = false
+                    autoCorrectEnabled = false,
+                    imeAction = ImeAction.Done
                 ),
-                modifier = Modifier.fillMaxWidth()
+                keyboardActions = KeyboardActions(onDone = { onConfirm(v) }),
+                shape = RoundedCornerShape(16.dp),
+                colors = dialogInputColors(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
             )
         },
-        confirmButton = { TextButton(onClick = { onConfirm(v) }) { Text(confirmLabel) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(v) },
+                shape = RoundedCornerShape(14.dp)
+            ) { Text(confirmLabel) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 4.dp
     )
 }
 
@@ -88,8 +137,11 @@ fun ConfirmDialog(title: String, text: String, confirmLabel: String = "Đồng �
         onDismissRequest = onDismiss,
         title = { DialogBackTitle(title, onDismiss) },
         text = { Text(text) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        confirmButton = { Button(onClick = onConfirm, shape = RoundedCornerShape(14.dp)) { Text(confirmLabel) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 4.dp
     )
 }
 
@@ -106,12 +158,18 @@ fun TypeConfirmDialog(title: String, text: String, word: String, onDismiss: () -
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = t, onValueChange = { t = it }, singleLine = true, label = { Text("Gõ $word để xác nhận") },
-                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth()
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = dialogInputColors(),
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         },
-        confirmButton = { TextButton(enabled = t.trim().equals(word, ignoreCase = true), onClick = onConfirm) { Text("Xác nhận") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        confirmButton = { Button(enabled = t.trim().equals(word, ignoreCase = true), onClick = onConfirm, shape = RoundedCornerShape(14.dp)) { Text("Xác nhận") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 4.dp
     )
 }
 
@@ -125,23 +183,37 @@ fun SetPinDialog(onSet: (String) -> Boolean, onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("Đặt mã PIN Admin") },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Icon(Icons.Default.Lock, null, Modifier.padding(9.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+                Spacer(Modifier.width(12.dp))
+                Text("Đặt mã PIN Admin", style = MaterialTheme.typography.titleLarge)
+            }
+        },
         text = {
             Column {
                 Text("PIN tối thiểu 4 chữ số, không được dùng 1234.", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(a, { a = it.filter(Char::isDigit).take(12) }, label = { Text("PIN mới") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    shape = RoundedCornerShape(16.dp), colors = dialogInputColors(),
                     modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(b, { b = it.filter(Char::isDigit).take(12) }, label = { Text("Nhập lại PIN") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    shape = RoundedCornerShape(16.dp), colors = dialogInputColors(),
                     isError = err != null, supportingText = err?.let { m -> ({ Text(m) }) },
                     modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
-            TextButton(enabled = !busy, onClick = {
+            Button(enabled = !busy, onClick = {
                 if (a != b) {
                     err = "Hai lần nhập không khớp"
                 } else {
@@ -152,8 +224,11 @@ fun SetPinDialog(onSet: (String) -> Boolean, onDone: () -> Unit) {
                         if (ok) onDone() else err = "PIN không hợp lệ (≥ 4 số, không phải 1234)"
                     }
                 }
-            }) { Text(if (busy) "Đang lưu…" else "Lưu") }
-        }
+            }, shape = RoundedCornerShape(14.dp)) { Text(if (busy) "Đang lưu…" else "Lưu") }
+        },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 4.dp
     )
 }
 
@@ -164,7 +239,11 @@ fun AdminUnlockDialog(vault: Vault, canBio: Boolean, onBio: (() -> Unit) -> Unit
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val pinFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { pinFocus.requestFocus() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        pinFocus.requestFocus()
+        keyboard?.show()
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { DialogBackTitle("Mở khóa Admin", onDismiss) },
@@ -174,19 +253,25 @@ fun AdminUnlockDialog(vault: Vault, canBio: Boolean, onBio: (() -> Unit) -> Unit
                     pin, { pin = it.filter(Char::isDigit).take(12) }, label = { Text("PIN") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = dialogInputColors(),
                     isError = err != null, supportingText = err?.let { m -> ({ Text(m) }) },
                     modifier = Modifier.fillMaxWidth().focusRequester(pinFocus)
                 )
                 if (canBio) {
                     Spacer(Modifier.height(8.dp))
-                    OutlinedButton(onClick = { onBio { vault.admin.unlock(); onDismiss() } }, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { onBio { vault.admin.unlock(); onDismiss() } },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
                         Icon(Icons.Default.Fingerprint, null); Spacer(Modifier.width(8.dp)); Text("Dùng vân tay")
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(enabled = !busy, onClick = {
+            Button(enabled = !busy, onClick = {
                 val lock = vault.pin.lockRemainingMs()
                 if (lock > 0) {
                     err = "Tạm khóa, thử lại sau ${(lock / 1000) + 1} giây"
@@ -199,9 +284,12 @@ fun AdminUnlockDialog(vault: Vault, canBio: Boolean, onBio: (() -> Unit) -> Unit
                         else err = if (vault.pin.lockRemainingMs() > 0) "Nhập sai nhiều lần, tạm khóa" else "PIN sai"
                     }
                 }
-            }) { Text(if (busy) "Đang kiểm tra…" else "Mở khóa") }
+            }, shape = RoundedCornerShape(14.dp)) { Text(if (busy) "Đang kiểm tra…" else "Mở khóa") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 4.dp
     )
 }
 
