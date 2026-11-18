@@ -59,7 +59,7 @@ object VlcHolder {
                     completed.complete(Unit)
                 }
             }
-            if (attached) h.post(release) else release()
+            if (attached) h.post(release) else release.run()
         }
         return completed
     }
