@@ -24,75 +24,134 @@ fun TagSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
     val allTags by vm.tagManagementCounts.collectAsStateWithLifecycle()
     var checked by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var text by remember { mutableStateOf("") }
-    var menuExpanded by remember { mutableStateOf(true) }
     LaunchedEffect(ids) { checked = vm.commonTags(ids) }
     val matchingTags = allTags.filter { text.isBlank() || it.name.contains(text.trim(), ignoreCase = true) }
     val exactMatch = allTags.any { it.name.equals(text.trim(), ignoreCase = true) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetMaxWidth = 640.dp) {
-        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).navigationBarsPadding().imePadding()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Quay lại") }
-                Text(if (ids.size > 1) "Gắn tag cho ${ids.size} mục" else "Gắn tag", style = MaterialTheme.typography.titleMedium)
-            }
-            Spacer(Modifier.height(8.dp))
-            Box {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it; menuExpanded = true },
-                    singleLine = true,
-                    label = { Text("Tìm tag đã tạo") },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
-                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
-                    trailingIcon = {
-                        IconButton(onClick = { menuExpanded = !menuExpanded }) {
-                            Icon(if (menuExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, "Chọn tag")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetMaxWidth = 640.dp,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                .padding(bottom = 16.dp).navigationBarsPadding().imePadding()
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(42.dp)
                 ) {
-                    if (matchingTags.isEmpty()) {
-                        DropdownMenuItem(
-                            text = { Text("Chưa có tag phù hợp") },
-                            onClick = { menuExpanded = false },
-                            enabled = false
-                        )
-                    } else matchingTags.forEach { t ->
-                        DropdownMenuItem(
-                            text = { Text("${t.name} · ${t.cnt} mục") },
-                            leadingIcon = {
-                                Checkbox(checked = t.id in checked, onCheckedChange = null)
-                            },
-                            onClick = {
-                                val on = t.id !in checked
-                                vm.setTag(ids, t.id, on)
-                                checked = if (on) checked + t.id else checked - t.id
-                                text = ""
-                                menuExpanded = false
-                            }
-                        )
-                    }
+                    Icon(Icons.AutoMirrored.Filled.Label, null, Modifier.padding(11.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (ids.size > 1) "Gắn tag cho ${ids.size} mục" else "Gắn tag",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Text(
+                        "Chọn tag có sẵn hoặc tạo tag mới",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Đóng") }
             }
+
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                placeholder = { Text("Tìm tag") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
+                trailingIcon = {
+                    if (text.isNotEmpty()) IconButton(onClick = { text = "" }) {
+                        Icon(Icons.Default.Close, "Xóa tìm kiếm")
+                    }
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
             if (text.isNotBlank() && !exactMatch) {
-                TextButton(
+                FilledTonalButton(
                     onClick = {
                         vm.createTag(text, ids) { tag -> checked = checked + tag.id }
                         text = ""
-                        menuExpanded = false
                     },
-                    modifier = Modifier.align(Alignment.Start)
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    shape = RoundedCornerShape(14.dp)
                 ) {
                     Icon(Icons.Default.Add, null)
                     Spacer(Modifier.width(6.dp))
                     Text("Tạo “${text.trim()}”")
                 }
             }
+            if (matchingTags.isEmpty()) {
+                Text(
+                    if (text.isBlank()) "Chưa có tag. Tìm kiếm để tạo tag đầu tiên."
+                    else "Không tìm thấy tag phù hợp.",
+                    Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = 260.dp).padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(matchingTags, key = { it.id }) { tag ->
+                        val isChecked = tag.id in checked
+                        Surface(
+                            onClick = {
+                                val shouldAttach = !isChecked
+                                vm.setTag(ids, tag.id, shouldAttach)
+                                checked = if (shouldAttach) checked + tag.id else checked - tag.id
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isChecked) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerLow
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { shouldAttach ->
+                                        vm.setTag(ids, tag.id, shouldAttach)
+                                        checked = if (shouldAttach) checked + tag.id else checked - tag.id
+                                    }
+                                )
+                                Text(
+                                    tag.name,
+                                    Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    "${tag.cnt}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                        }
+                    }
+                }
+            }
             if (checked.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text("ĐÃ GẮN · ${checked.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(4.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     allTags.filter { it.id in checked }.forEach { t ->
@@ -108,8 +167,12 @@ fun TagSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text("Xong") }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text("Xong") }
         }
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -199,42 +200,57 @@ private fun MediaGrid(
 
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp),
+            Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "Hiển thị",
+                "Bố cục",
                 Modifier.weight(1f),
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            SingleChoiceSegmentedButtonRow {
-                SegmentedButton(
-                    selected = layout == MediaLayout.GRID,
-                    onClick = {
-                        layout = MediaLayout.GRID
-                        vm.vault.prefs.mediaListMode = false
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                    icon = {
-                        SegmentedButtonDefaults.Icon(active = layout == MediaLayout.GRID) {
-                            Icon(Icons.Default.GridView, "Lưới")
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow
+            ) {
+                Row(Modifier.padding(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        onClick = {
+                            layout = MediaLayout.GRID
+                            vm.vault.prefs.mediaListMode = false
+                        },
+                        shape = RoundedCornerShape(11.dp),
+                        color = if (layout == MediaLayout.GRID) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                        modifier = Modifier.size(width = 44.dp, height = 38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.GridView,
+                                "Hiển thị dạng lưới",
+                                tint = if (layout == MediaLayout.GRID) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                ) { Text("Lưới") }
-                SegmentedButton(
-                    selected = layout == MediaLayout.LIST,
-                    onClick = {
-                        layout = MediaLayout.LIST
-                        vm.vault.prefs.mediaListMode = true
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                    icon = {
-                        SegmentedButtonDefaults.Icon(active = layout == MediaLayout.LIST) {
-                            Icon(Icons.Default.ViewList, "Danh sách")
+                    Surface(
+                        onClick = {
+                            layout = MediaLayout.LIST
+                            vm.vault.prefs.mediaListMode = true
+                        },
+                        shape = RoundedCornerShape(11.dp),
+                        color = if (layout == MediaLayout.LIST) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                        modifier = Modifier.size(width = 44.dp, height = 38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.ViewList,
+                                "Hiển thị dạng danh sách",
+                                tint = if (layout == MediaLayout.LIST) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                ) { Text("Danh sách") }
+                }
             }
         }
         if (items.itemCount == 0) {

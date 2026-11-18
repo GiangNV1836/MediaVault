@@ -339,6 +339,8 @@ private fun VideoPage(
     var dragging by remember(m.id) { mutableStateOf(false) }
     var fastForwarding by remember(m.id) { mutableStateOf(false) }
     var dragVal by remember(m.id) { mutableFloatStateOf(0f) }
+    var seekFeedbackSeconds by remember(m.id) { mutableIntStateOf(0) }
+    var seekFeedbackTrigger by remember(m.id) { mutableIntStateOf(0) }
     var showRestart by remember(m.id) { mutableStateOf(m.lastPositionMs > 5000) }
     val compact = isCompactWidth()
     val portrait = LocalContext.current.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
@@ -511,6 +513,12 @@ private fun VideoPage(
     LaunchedEffect(aspect) { vlc.setAspect(aspect) }
     LaunchedEffect(error) { if (error) onFailed() }
     LaunchedEffect(showRestart) { if (showRestart) { delay(6000); showRestart = false } }
+    LaunchedEffect(seekFeedbackTrigger) {
+        if (seekFeedbackTrigger > 0) {
+            delay(700)
+            seekFeedbackSeconds = 0
+        }
+    }
     LaunchedEffect(controls, playing, dragging) {
         if (controls && playing && !dragging && !portrait) {
             delay(3500)
@@ -598,7 +606,12 @@ private fun VideoPage(
                             }
                         },
                         onTap = { onToggle() },
-                        onDoubleTap = { o -> seekBy(if (o.x < size.width / 2) -10_000 else 10_000) },
+                        onDoubleTap = { o ->
+                            val delta = if (o.x < size.width / 2) -5_000L else 5_000L
+                            seekBy(delta)
+                            seekFeedbackSeconds = if (delta < 0) -5 else 5
+                            seekFeedbackTrigger++
+                        },
                         onLongPress = {}
                     )
                 }
@@ -612,7 +625,33 @@ private fun VideoPage(
                 Text("2×", Modifier.padding(horizontal = 20.dp, vertical = 10.dp), color = Color.White, style = MaterialTheme.typography.titleLarge)
             }
         }
-        if (loading && !error) {
+        AnimatedVisibility(
+            visible = seekFeedbackSeconds != 0,
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.62f),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (seekFeedbackSeconds < 0) Icons.Default.Replay5 else Icons.Default.Forward5,
+                        null,
+                        tint = Color.White
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "${if (seekFeedbackSeconds > 0) "+" else ""}${seekFeedbackSeconds}s",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
+        if (loading && !error && seekFeedbackSeconds == 0) {
             Column(
                 modifier = Modifier.align(Alignment.Center),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -754,11 +793,11 @@ private fun VideoPage(
                                 Icon(Icons.Default.SkipPrevious, "Trước", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canPrevious) 1f else 0.4f))
                             }
                             IconButton(
-                                onClick = { seekBy(-10_000) },
+                                onClick = { seekBy(-5_000) },
                                 modifier = Modifier.size(sideButton).background(
                                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
                                 )
-                            ) { Icon(Icons.Default.Replay10, "Lùi 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
+                            ) { Icon(Icons.Default.Replay5, "Lùi 5 giây", tint = MaterialTheme.colorScheme.onSurface) }
                             IconButton(
                                 onClick = { togglePlayback() },
                                 modifier = Modifier.size(big).background(MaterialTheme.colorScheme.primary, CircleShape)
@@ -771,11 +810,11 @@ private fun VideoPage(
                                 )
                             }
                             IconButton(
-                                onClick = { seekBy(10_000) },
+                                onClick = { seekBy(5_000) },
                                 modifier = Modifier.size(sideButton).background(
                                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
                                 )
-                            ) { Icon(Icons.Default.Forward10, "Tiến 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
+                            ) { Icon(Icons.Default.Forward5, "Tiến 5 giây", tint = MaterialTheme.colorScheme.onSurface) }
                             IconButton(
                                 onClick = onNext, enabled = canNext,
                                 modifier = Modifier.size(sideButton).background(

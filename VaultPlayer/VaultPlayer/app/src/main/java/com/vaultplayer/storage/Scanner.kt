@@ -239,7 +239,7 @@ class Scanner(
             val batch = dao.pendingBatch(root.id, 500)
             if (batch.isEmpty()) break
             db.withTransaction {
-                var cur = dao.counter("alias") ?: 1L
+                var cur = (dao.counter("alias") ?: 1L).coerceAtLeast(1L)
                 val rows = ArrayList<MediaEntry>()
                 val stagings = ArrayList<RestoreStaging?>()
                 for (p in batch) {
@@ -249,7 +249,7 @@ class Scanner(
                         do {
                             alias = (if (p.mediaType == "VIDEO") "Clip #" else "Ảnh #") + cur
                             cur++
-                        } while (dao.aliasExists(alias!!) > 0)
+                        } while (dao.aliasExists(alias!!) > 0 || rows.any { it.aliasName == alias })
                     }
                     rows.add(MediaEntry(
                         rootId = root.id, mediaType = p.mediaType, relativePath = p.relativePath, pathKey = p.pathKey,
