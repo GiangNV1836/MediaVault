@@ -19,18 +19,18 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
-      - name: Grant execute permission for gradlew
-        working-directory: VaultPlayer
-        run: chmod +x ./gradlew
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
       - name: Build Debug APK
-        working-directory: VaultPlayer
-        run: ./gradlew assembleDebug --stacktrace
+        working-directory: VaultPlayer/VaultPlayer
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v5
         with:
           name: VaultPlayer-debug-apk
-          path: VaultPlayer/app/build/outputs/apk/debug/*.apk
+          path: VaultPlayer/VaultPlayer/app/build/outputs/apk/debug/*.apk
