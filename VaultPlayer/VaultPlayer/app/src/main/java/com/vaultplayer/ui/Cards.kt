@@ -137,13 +137,20 @@ fun MediaCard(
             }
         }
     } else {
+        val shape = RoundedCornerShape(14.dp)
         Column(
             cardModifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else Color.Transparent)
-                .then(if (selected) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)) else Modifier)
-                .padding(3.dp)
-                .padding(bottom = 4.dp)
+                .clip(shape)
+                .background(
+                    if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    else MaterialTheme.colorScheme.surfaceContainerLow
+                )
+                .border(
+                    1.dp,
+                    if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                    shape
+                )
         ) {
             MediaThumbnail(
                 vm, row, isVideo, shown, autoShow, selectionMode, selected,
@@ -151,11 +158,17 @@ fun MediaCard(
                 onFavorite = onFavorite,
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
             )
-            Row(
-                Modifier.fillMaxWidth().padding(top = 7.dp, start = 4.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                else MaterialTheme.colorScheme.surfaceContainerLow
             ) {
-                MediaMetadata(row, admin, listMode, selected, Modifier.weight(1f))
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MediaMetadata(row, admin, listMode, selected, Modifier.weight(1f))
+                }
             }
         }
     }

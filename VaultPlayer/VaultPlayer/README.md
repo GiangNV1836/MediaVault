@@ -12,9 +12,10 @@
 - PBKDF2 (PIN, mật khẩu backup) chạy ở luồng nền; khóa Keystore được lưu đệm; LibVLC dùng chung một thể hiện; mở file và khởi tạo media player trên luồng nền.
 - Player mặc định dùng Media3/Android MediaCodec; nếu phát sinh lỗi decoder thì thử LibVLC giải mã phần cứng tại vị trí hiện tại. Có thể chọn LibVLC phần cứng/phần mềm thủ công; không tự chuyển sang phần mềm theo timeout, dùng bộ đệm tệp 1000 ms.
 - Player có timeline, chuyển mục, chạm đúp để tua ±10 giây và nhấn giữ để phát nhanh 2×; có thể phát lại từ đầu sau khi video kết thúc.
-- Media phân trang có hai kiểu hiển thị thuần lưới/danh sách; lưới chỉnh cỡ bằng thanh zoom hoặc thao tác pinch hai ngón, bộ lọc cuộn ngang và không tự xuống dòng.
+- Media phân trang ở tab Tất cả, Yêu thích và nội dung Playlist dùng chung hai kiểu hiển thị lưới cố định 2 cột/danh sách; có thể chuyển kiểu nhanh, bộ lọc cuộn ngang và không tự xuống dòng.
 - Có tab Tag riêng để quản lý/lọc theo tag và tạo playlist lọc tag; tab Playlist riêng cho các danh sách phát. Nhấn giữ media để bật chọn nhiều, có checkbox và bộ đếm để gắn tag/yêu thích/tạo playlist.
-- Bộ chọn tag mở sẵn danh sách có thể tìm kiếm, tránh tạo trùng; quản lý tag dùng sheet gọn để thêm, tìm, đổi tên/gộp và xóa.
+- Chọn một playlist để xem các mục bên trong theo trang, phát tiếp từ mục đã chọn hoặc phát toàn bộ/ngẫu nhiên.
+- Bộ chọn tag mở sẵn danh sách có thể tìm kiếm, tránh tạo trùng; quản lý tag dùng sheet gọn để thêm, tìm, đổi tên/gộp và xóa qua menu thao tác.
 - Lần quét đầy đủ đầu tiên của nguồn mới sẽ tự nhập các mục tìm thấy sau khi quét thành công.
 - UI Material 3 dùng màu hệ thống, tab dưới trên màn hẹp/NavigationRail trên màn rộng, lưới và thẻ co giãn; các dialog thao tác có nút quay lại và danh sách có trạng thái tải/lỗi.
 - Gắn tag/yêu thích hàng loạt gói trong một transaction (một lần làm mới giao diện).

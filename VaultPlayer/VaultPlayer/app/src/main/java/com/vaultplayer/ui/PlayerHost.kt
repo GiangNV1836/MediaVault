@@ -649,10 +649,6 @@ private fun VideoPage(
                 bottom = bottomInset + safeBottom
             )
         ) {
-            val big = if (compact) 50.dp else 58.dp
-            val sideButton = if (compact) 40.dp else 44.dp
-            val sideGap = if (compact) 10.dp else 14.dp
-            val mainGap = if (compact) 18.dp else 24.dp
             val panelShape = RoundedCornerShape(24.dp)
             Surface(
                 modifier = Modifier.widthIn(max = if (portrait) 560.dp else 820.dp)
@@ -722,7 +718,10 @@ private fun VideoPage(
                             onValueChange = { dragging = true; dragVal = it },
                             onValueChangeFinished = { seekTo(dragVal.toLong()); dragging = false },
                             valueRange = 0f..max,
-                            modifier = Modifier.weight(1f).height(36.dp).padding(horizontal = 8.dp),
+                            modifier = Modifier.weight(1f)
+                                .height(48.dp)
+                                .padding(horizontal = 8.dp)
+                                .graphicsLayer { scaleY = 0.55f },
                             colors = SliderDefaults.colors(
                                 activeTrackColor = MaterialTheme.colorScheme.primary,
                                 inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
@@ -737,49 +736,54 @@ private fun VideoPage(
                         )
                     }
                     Spacer(Modifier.height(6.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = onPrevious, enabled = canPrevious,
-                            modifier = Modifier.size(sideButton).background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
-                            )
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val narrow = maxWidth < 320.dp
+                        val big = if (narrow) 48.dp else if (compact) 54.dp else 60.dp
+                        val sideButton = if (narrow) 40.dp else if (compact) 42.dp else 46.dp
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.SkipPrevious, "Trước", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canPrevious) 1f else 0.4f))
-                        }
-                        Spacer(Modifier.width(sideGap))
-                        IconButton(
-                            onClick = { seekBy(-10_000) },
-                            modifier = Modifier.size(sideButton).background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
-                            )
-                        ) { Icon(Icons.Default.Replay10, "Lùi 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
-                        Spacer(Modifier.width(mainGap))
-                        IconButton(
-                            onClick = { togglePlayback() },
-                            modifier = Modifier.size(big).background(MaterialTheme.colorScheme.primary, CircleShape)
-                        ) {
-                            Icon(
-                                if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                if (playing) "Tạm dừng" else "Phát",
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(big - 20.dp)
-                            )
-                        }
-                        Spacer(Modifier.width(mainGap))
-                        IconButton(
-                            onClick = { seekBy(10_000) },
-                            modifier = Modifier.size(sideButton).background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
-                            )
-                        ) { Icon(Icons.Default.Forward10, "Tiến 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
-                        Spacer(Modifier.width(sideGap))
-                        IconButton(
-                            onClick = onNext, enabled = canNext,
-                            modifier = Modifier.size(sideButton).background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
-                            )
-                        ) {
-                            Icon(Icons.Default.SkipNext, "Tiếp theo", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canNext) 1f else 0.4f))
+                            IconButton(
+                                onClick = onPrevious, enabled = canPrevious,
+                                modifier = Modifier.size(sideButton).background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
+                                )
+                            ) {
+                                Icon(Icons.Default.SkipPrevious, "Trước", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canPrevious) 1f else 0.4f))
+                            }
+                            IconButton(
+                                onClick = { seekBy(-10_000) },
+                                modifier = Modifier.size(sideButton).background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
+                                )
+                            ) { Icon(Icons.Default.Replay10, "Lùi 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
+                            IconButton(
+                                onClick = { togglePlayback() },
+                                modifier = Modifier.size(big).background(MaterialTheme.colorScheme.primary, CircleShape)
+                            ) {
+                                Icon(
+                                    if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    if (playing) "Tạm dừng" else "Phát",
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(big - 20.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = { seekBy(10_000) },
+                                modifier = Modifier.size(sideButton).background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
+                                )
+                            ) { Icon(Icons.Default.Forward10, "Tiến 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
+                            IconButton(
+                                onClick = onNext, enabled = canNext,
+                                modifier = Modifier.size(sideButton).background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f), CircleShape
+                                )
+                            ) {
+                                Icon(Icons.Default.SkipNext, "Tiếp theo", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canNext) 1f else 0.4f))
+                            }
                         }
                     }
                 }

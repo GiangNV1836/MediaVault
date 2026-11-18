@@ -9,9 +9,6 @@ class Prefs(ctx: Context) {
     var autoShowThumbs: Boolean
         get() = sp.getBoolean("autoShow", false)
         set(v) { sp.edit().putBoolean("autoShow", v).apply() }
-    var gridMinCellDp: Int
-        get() = sp.getInt("gridMinCellDp", 180).coerceIn(140, 300)
-        set(v) { sp.edit().putInt("gridMinCellDp", v.coerceIn(140, 300)).apply() }
     var mediaListMode: Boolean
         get() = sp.getBoolean("mediaListMode", false)
         set(v) { sp.edit().putBoolean("mediaListMode", v).apply() }

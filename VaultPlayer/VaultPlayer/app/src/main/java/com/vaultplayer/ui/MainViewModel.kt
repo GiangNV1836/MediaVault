@@ -140,6 +140,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         open(ids, 0, true)
     }
 
+    fun openFromPlaylist(p: Playlist, startId: Long) = viewModelScope.launch {
+        val ids = repo.playlistIds(p, roots.value)
+        open(ids, ids.indexOf(startId).coerceAtLeast(0), false)
+    }
+
+    fun playlistPaging(p: Playlist): Flow<PagingData<MediaRow>> =
+        roots.flatMapLatest { rootIds ->
+            flow {
+                val current = dao.playlist(p.id) ?: p
+                if (current.type == "MANUAL") {
+                    emitAll(
+                        Pager(PagingConfig(pageSize = 40, enablePlaceholders = false)) {
+                            dao.pagePlaylist(current.id, rootIds)
+                        }.flow
+                    )
+                } else {
+                    val tagIds = dao.tagIdsByNames(current.tagFilter.split(SEP).filter { it.isNotEmpty() })
+                    if (tagIds.isEmpty()) {
+                        emit(PagingData.empty())
+                    } else {
+                        emitAll(
+                            Pager(PagingConfig(pageSize = 40, enablePlaceholders = false)) {
+                                dao.pageByTags(rootIds, tagIds, if (current.matchMode == "ALL") 1 else 0, tagIds.size)
+                            }.flow
+                        )
+                    }
+                }
+            }
+        }.cachedIn(viewModelScope)
+
     // ---- chọn nhiều
     fun toggleSelect(id: Long) { selection.update { if (id in it) it - id else it + id } }
     fun clearSelection() { selection.value = emptySet() }

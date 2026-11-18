@@ -3,8 +3,11 @@ package com.vaultplayer.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -154,37 +157,94 @@ fun TagManageDialog(vm: MainViewModel, admin: Boolean, onDismiss: () -> Unit) {
     var ren by remember { mutableStateOf<TagCount?>(null) }
     var newTag by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
+    var actionMenu by remember { mutableStateOf<Long?>(null) }
     val visibleTags = tags.filter { it.name.contains(search.trim(), ignoreCase = true) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetMaxWidth = 640.dp) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetMaxWidth = 640.dp,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp)
                 .navigationBarsPadding().imePadding()
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Quay lại") }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Label,
+                        null,
+                        Modifier.padding(11.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Quản lý tag", style = MaterialTheme.typography.titleLarge)
-                    Text("${tags.size} tag", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Tạo, tìm và sắp xếp tag",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                TextButton(onClick = onDismiss) { Text("Xong") }
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Text(
+                        "${tags.size}",
+                        Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Đóng") }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+
+            Text("TẠO TAG", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(6.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 OutlinedTextField(
                     value = newTag,
                     onValueChange = { newTag = it },
                     singleLine = true,
-                    placeholder = { Text("Tạo tag mới") },
+                    placeholder = { Text("Tên tag mới") },
                     keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    ),
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(Modifier.width(8.dp))
-                FilledIconButton(
+                Spacer(Modifier.width(10.dp))
+                FilledTonalButton(
                     enabled = newTag.isNotBlank(),
-                    onClick = { vm.createTag(newTag, emptyList()) { newTag = "" } }
-                ) { Icon(Icons.Default.Add, "Tạo tag") }
+                    onClick = { vm.createTag(newTag, emptyList()) { newTag = "" } },
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp)
+                ) {
+                    Icon(Icons.Default.Add, "Tạo tag")
+                    Spacer(Modifier.width(6.dp))
+                    Text("Tạo")
+                }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
+            Text("DANH SÁCH TAG", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(6.dp))
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it },
@@ -196,36 +256,76 @@ fun TagManageDialog(vm: MainViewModel, admin: Boolean, onDismiss: () -> Unit) {
                         Icon(Icons.Default.Close, "Xóa tìm kiếm")
                     }
                 },
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                ),
                 modifier = Modifier.fillMaxWidth()
             )
             if (visibleTags.isEmpty()) {
-                Text(
-                    if (search.isBlank()) "Chưa có tag" else "Không tìm thấy tag",
-                    Modifier.padding(vertical = 20.dp).align(Alignment.CenterHorizontally),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(
+                    Modifier.fillMaxWidth().padding(vertical = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        null,
+                        Modifier.size(32.dp),
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (search.isBlank()) "Chưa có tag nào" else "Không tìm thấy tag",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             } else {
                 LazyColumn(
-                    Modifier.fillMaxWidth().heightIn(max = 360.dp),
-                    contentPadding = PaddingValues(vertical = 6.dp)
+                    Modifier.fillMaxWidth().heightIn(max = 340.dp),
+                    contentPadding = PaddingValues(top = 10.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(visibleTags, key = { it.id }) { tag ->
-                        Row(
-                            Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
                         ) {
-                            TagChip(tag.name)
-                            Text(
-                                "${tag.cnt} mục",
-                                Modifier.weight(1f).padding(start = 10.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (admin) IconButton(onClick = { ren = tag }, modifier = Modifier.size(40.dp)) {
-                                Icon(Icons.Default.Edit, "Đổi tên hoặc gộp tag", Modifier.size(18.dp))
-                            }
-                            IconButton(onClick = { del = tag }, modifier = Modifier.size(40.dp)) {
-                                Icon(Icons.Default.DeleteOutline, "Xóa tag", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                            Row(
+                                Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TagChip(tag.name)
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    "${tag.cnt} mục",
+                                    Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Box {
+                                    IconButton(onClick = { actionMenu = tag.id }) {
+                                        Icon(Icons.Default.MoreVert, "Thao tác với tag")
+                                    }
+                                    DropdownMenu(
+                                        expanded = actionMenu == tag.id,
+                                        onDismissRequest = { actionMenu = null }
+                                    ) {
+                                        if (admin) DropdownMenuItem(
+                                            text = { Text("Đổi tên hoặc gộp") },
+                                            leadingIcon = { Icon(Icons.Default.Edit, null) },
+                                            onClick = { actionMenu = null; ren = tag }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Xóa tag") },
+                                            leadingIcon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
+                                            onClick = { actionMenu = null; del = tag }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

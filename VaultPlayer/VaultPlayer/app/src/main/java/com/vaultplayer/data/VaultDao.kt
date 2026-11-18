@@ -100,6 +100,10 @@ interface VaultDao {
     suspend fun idsFav(roots: List<Long>): List<Long>
     @Query("SELECT m.id FROM media_entry m WHERE $BY_TAGS ORDER BY m.id")
     suspend fun idsByTags(roots: List<Long>, tagIds: List<Long>, allMode: Int, n: Int): List<Long>
+    @Query("SELECT $ROW FROM media_entry m JOIN playlist_item pi ON pi.mediaId = m.id WHERE pi.playlistId = :playlistId AND m.isMissing = 0 AND m.rootId IN (:roots) ORDER BY pi.position")
+    fun pagePlaylist(playlistId: Long, roots: List<Long>): PagingSource<Int, MediaRow>
+    @Query("SELECT $ROW FROM media_entry m WHERE $BY_TAGS ORDER BY m.id")
+    fun pageByTags(roots: List<Long>, tagIds: List<Long>, allMode: Int, n: Int): PagingSource<Int, MediaRow>
     @Query("SELECT COUNT(*) FROM media_entry m WHERE $BY_TAGS")
     suspend fun countByTags(roots: List<Long>, tagIds: List<Long>, allMode: Int, n: Int): Int
     @Query("SELECT m.id FROM playlist_item pi JOIN media_entry m ON m.id = pi.mediaId WHERE pi.playlistId = :p AND m.isMissing = 0 AND m.rootId IN (:roots) ORDER BY pi.position")

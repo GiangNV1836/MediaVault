@@ -2,9 +2,6 @@ package com.vaultplayer.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -12,10 +9,9 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.*
@@ -186,14 +182,8 @@ private fun MediaGrid(
     val shown by vm.shown.collectAsStateWithLifecycle()
     val autoShow = vm.vault.prefs.autoShowThumbs
     var aliasEdit by remember { mutableStateOf<MediaRow?>(null) }
-    var minCellDp by remember { mutableIntStateOf(vm.vault.prefs.gridMinCellDp) }
     var layout by remember {
         mutableStateOf(if (vm.vault.prefs.mediaListMode) MediaLayout.LIST else MediaLayout.GRID)
-    }
-    val currentCellSize = rememberUpdatedState(minCellDp)
-    val updateCellSize = rememberUpdatedState<(Int) -> Unit> { size ->
-        minCellDp = size.coerceIn(140, 300)
-        vm.vault.prefs.gridMinCellDp = minCellDp
     }
 
     val renderItem: @Composable (MediaRow) -> Unit = { row ->
@@ -208,45 +198,42 @@ private fun MediaGrid(
 
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
+            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                if (layout == MediaLayout.GRID) "Lưới" else "Danh sách",
-                Modifier.weight(1f).padding(start = 8.dp),
+                "Hiển thị",
+                Modifier.weight(1f),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            IconToggleButton(
-                checked = layout == MediaLayout.GRID,
-                onCheckedChange = {
-                    layout = MediaLayout.GRID
-                    vm.vault.prefs.mediaListMode = false
-                }
-            ) { Icon(Icons.Default.GridView, "Hiển thị dạng lưới") }
-            IconToggleButton(
-                checked = layout == MediaLayout.LIST,
-                onCheckedChange = {
-                    layout = MediaLayout.LIST
-                    vm.vault.prefs.mediaListMode = true
-                }
-            ) { Icon(Icons.Default.ViewList, "Hiển thị dạng danh sách") }
-            if (layout == MediaLayout.GRID) {
-                IconButton(
-                    onClick = { updateCellSize.value(minCellDp - 20) },
-                    enabled = minCellDp > 140
-                ) { Icon(Icons.Default.ZoomOut, "Thu nhỏ ô lưới") }
-                Slider(
-                    value = minCellDp.toFloat(),
-                    onValueChange = { updateCellSize.value(it.toInt()) },
-                    valueRange = 140f..300f,
-                    steps = 7,
-                    modifier = Modifier.widthIn(min = 72.dp, max = 140.dp)
-                )
-                IconButton(
-                    onClick = { updateCellSize.value(minCellDp + 20) },
-                    enabled = minCellDp < 300
-                ) { Icon(Icons.Default.ZoomIn, "Phóng to ô lưới") }
+            SingleChoiceSegmentedButtonRow {
+                SegmentedButton(
+                    selected = layout == MediaLayout.GRID,
+                    onClick = {
+                        layout = MediaLayout.GRID
+                        vm.vault.prefs.mediaListMode = false
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    icon = {
+                        SegmentedButtonDefaults.Icon(active = layout == MediaLayout.GRID) {
+                            Icon(Icons.Default.GridView, "Lưới")
+                        }
+                    }
+                ) { Text("Lưới") }
+                SegmentedButton(
+                    selected = layout == MediaLayout.LIST,
+                    onClick = {
+                        layout = MediaLayout.LIST
+                        vm.vault.prefs.mediaListMode = true
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    icon = {
+                        SegmentedButtonDefaults.Icon(active = layout == MediaLayout.LIST) {
+                            Icon(Icons.Default.ViewList, "Danh sách")
+                        }
+                    }
+                ) { Text("Danh sách") }
             }
         }
         if (items.itemCount == 0) {
@@ -266,32 +253,13 @@ private fun MediaGrid(
                 }
             }
         } else {
-            val pinchZoom = if (layout == MediaLayout.GRID) {
-                Modifier.pointerInput(Unit) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
-                        var accumulatedZoom = 1f
-                        do {
-                            val event = awaitPointerEvent()
-                            if (event.changes.count { it.pressed } > 1) {
-                                accumulatedZoom *= event.calculateZoom()
-                                if (accumulatedZoom >= 1.15f || accumulatedZoom <= 0.87f) {
-                                    updateCellSize.value((currentCellSize.value * accumulatedZoom).toInt())
-                                    accumulatedZoom = 1f
-                                }
-                                event.changes.forEach { if (it.pressed) it.consume() }
-                            }
-                        } while (event.changes.any { it.pressed })
-                    }
-                }
-            } else Modifier
             if (layout == MediaLayout.GRID) {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minCellDp.dp),
+                    columns = GridCells.Fixed(2),
                     contentPadding = PaddingValues(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.weight(1f).fillMaxWidth().then(pinchZoom)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth()
                 ) {
                     items(count = items.itemCount, key = items.itemKey { it.id }) {
                         val row = items[it]
@@ -499,11 +467,20 @@ fun TagTab(vm: MainViewModel) {
 @Composable
 fun PlaylistTab(vm: MainViewModel) {
     val pls by vm.playlists.collectAsStateWithLifecycle()
+    val admin by vm.admin.isAdmin.collectAsStateWithLifecycle()
     var rename by remember { mutableStateOf<PlaylistUi?>(null) }
     var delete by remember { mutableStateOf<PlaylistUi?>(null) }
     var menuFor by remember { mutableStateOf<Long?>(null) }
+    var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
+    val selectedPlaylist = pls.firstOrNull { it.p.id == selectedPlaylistId }
+    LaunchedEffect(pls, selectedPlaylistId) {
+        if (selectedPlaylistId != null && selectedPlaylist == null) selectedPlaylistId = null
+    }
+    BackHandler(enabled = selectedPlaylistId != null) { selectedPlaylistId = null }
 
-    if (pls.isEmpty()) {
+    if (selectedPlaylist != null) {
+        PlaylistContents(vm, selectedPlaylist, admin) { selectedPlaylistId = null }
+    } else if (pls.isEmpty()) {
         EmptyState(
             Icons.AutoMirrored.Filled.PlaylistPlay,
             "Chưa có playlist",
@@ -527,6 +504,7 @@ fun PlaylistTab(vm: MainViewModel) {
             }
             items(pls, key = { it.p.id }) { playlist ->
                 Surface(
+                    onClick = { selectedPlaylistId = playlist.p.id },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -556,6 +534,9 @@ fun PlaylistTab(vm: MainViewModel) {
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                        IconButton(onClick = { selectedPlaylistId = playlist.p.id }) {
+                            Icon(Icons.Default.ChevronRight, "Xem nội dung playlist")
                         }
                         IconButton(onClick = { vm.playPlaylist(playlist.p) }) {
                             Icon(Icons.Default.PlayArrow, "Phát playlist", tint = MaterialTheme.colorScheme.primary)
@@ -600,6 +581,87 @@ fun PlaylistTab(vm: MainViewModel) {
         ) {
             vm.deletePlaylist(playlist.p.id)
             delete = null
+        }
+    }
+}
+
+@Composable
+private fun PlaylistContents(
+    vm: MainViewModel,
+    playlist: PlaylistUi,
+    admin: Boolean,
+    onBack: () -> Unit
+) {
+    val pagingFlow = remember(playlist.p) { vm.playlistPaging(playlist.p) }
+    val items = pagingFlow.collectAsLazyPagingItems()
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Quay lại playlist") }
+            Column(Modifier.weight(1f)) {
+                Text(playlist.p.name, style = MaterialTheme.typography.titleLarge, maxLines = 1)
+                Text(
+                    "${playlist.count} mục · ${if (playlist.p.type == "TAG_FILTER") "Theo tag" else "Tùy chỉnh"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+            if (maxWidth < 360.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { vm.playPlaylist(playlist.p) },
+                        enabled = playlist.count > 0,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.PlayArrow, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Phát tất cả")
+                    }
+                    OutlinedButton(
+                        onClick = { vm.playPlaylist(playlist.p, true) },
+                        enabled = playlist.count > 0,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Shuffle, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ngẫu nhiên")
+                    }
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = { vm.playPlaylist(playlist.p) },
+                        enabled = playlist.count > 0,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Phát tất cả")
+                    }
+                    OutlinedButton(
+                        onClick = { vm.playPlaylist(playlist.p, true) },
+                        enabled = playlist.count > 0,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Shuffle, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ngẫu nhiên")
+                    }
+                }
+            }
+        }
+        Box(Modifier.weight(1f)) {
+            MediaGrid(
+                vm,
+                items,
+                admin,
+                onOpen = { vm.openFromPlaylist(playlist.p, it) },
+                emptyText = "Playlist chưa có mục nào"
+            )
         }
     }
 }
