@@ -65,18 +65,31 @@ fun HomeScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
         topBar = {
             if (sel.isNotEmpty()) {
                 TopAppBar(
-                    title = { Text("${sel.size} đã chọn") },
+                    title = { Text("${sel.size} đã chọn", style = MaterialTheme.typography.titleLarge) },
                     navigationIcon = { IconButton(onClick = { vm.clearSelection() }) { Icon(Icons.Default.Close, "Bỏ chọn") } },
                     actions = {
                         IconButton(onClick = { vm.selectAll() }) { Icon(Icons.Default.SelectAll, "Chọn tất cả") }
                         IconButton(onClick = { vm.favoriteSelected(true) }) { Icon(Icons.Default.Favorite, "Yêu thích") }
                         IconButton(onClick = { tagIds = sel.toList() }) { Icon(Icons.AutoMirrored.Filled.Label, "Gắn tag") }
                         IconButton(onClick = { plIds = sel.toList() }) { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, "Thêm vào playlist") }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
                 )
             } else {
                 TopAppBar(
-                    title = { Text(if (admin) "VaultPlayer · Admin" else "VaultPlayer") },
+                    title = {
+                        Column {
+                            Text("VaultPlayer", style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                if (admin) "Chế độ quản trị" else "Thư viện riêng tư",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
+                            )
+                        }
+                    },
                     actions = {
                         IconButton(onClick = { if (admin) vm.admin.lock() else showUnlock = true }) {
                             Icon(if (admin) Icons.Default.LockOpen else Icons.Default.Lock, "Admin")
@@ -85,12 +98,20 @@ fun HomeScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
                             if (admin && warnings.isNotEmpty()) BadgedBox(badge = { Badge() }) { Icon(Icons.Default.Settings, "Cài đặt") }
                             else Icon(Icons.Default.Settings, "Cài đặt")
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 )
             }
         },
         bottomBar = {
-            if (compact) NavigationBar {
+            if (compact) NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                tonalElevation = 4.dp
+            ) {
                 TAB_LABELS.forEachIndexed { i, _ ->
                     NavigationBarItem(selected = tab == i, onClick = { vm.tab.value = i; vm.clearSelection() },
                         icon = { Icon(tabIcon(i), null) }, label = { Text(COMPACT_TAB_LABELS[i], maxLines = 1) })
@@ -98,10 +119,13 @@ fun HomeScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
             }
         },
         snackbarHost = { SnackbarHost(snack) },
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = MaterialTheme.colorScheme.background
     ) { pad ->
         Row(Modifier.padding(pad).fillMaxSize()) {
-            if (!compact) NavigationRail {
+            if (!compact) NavigationRail(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
                 Spacer(Modifier.weight(1f))
                 TAB_LABELS.forEachIndexed { i, l ->
                     NavigationRailItem(selected = tab == i, onClick = { vm.tab.value = i; vm.clearSelection() },
@@ -196,7 +220,12 @@ fun AllTab(vm: MainViewModel) {
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = { if (q.isNotEmpty()) IconButton(onClick = { vm.query.value = "" }) { Icon(Icons.Default.Close, "Xóa") } },
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
         )
         FlowRow(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp),

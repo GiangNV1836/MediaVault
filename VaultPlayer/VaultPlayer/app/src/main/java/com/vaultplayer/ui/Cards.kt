@@ -115,54 +115,85 @@ fun MediaCard(
     shown: Boolean, autoShow: Boolean, onOpen: () -> Unit, onEditAlias: () -> Unit
 ) {
     val isVideo = row.mediaType == "VIDEO"
-    BoxWithConstraints {
-        val thumbWidth = (maxWidth * 0.36f).coerceIn(112.dp, 168.dp)
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth().combinedClickable(
-                onClick = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
-                onLongClick = { vm.toggleSelect(row.id) }
-            ),
-            colors = CardDefaults.elevatedCardColors(
-                containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
-            )
-        ) {
-            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().combinedClickable(
+            onClick = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
+            onLongClick = { vm.toggleSelect(row.id) }
+        ),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp, pressedElevation = 8.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
+        Column {
+            Box {
                 ThumbBox(
                     vm, row.id, isVideo, show = autoShow || shown, manual = !autoShow,
                     onToggleShow = { vm.toggleShown(row.id) },
                     onTap = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
-                    modifier = Modifier.width(thumbWidth)
+                    modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.width(12.dp))
+                if (selectionMode) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                    ) {
+                        Checkbox(checked = selected, onCheckedChange = { vm.toggleSelect(row.id) })
+                    }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
                 Column(Modifier.weight(1f)) {
-                    Text(row.aliasName, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(row.aliasName, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (isVideo) Icons.Default.Movie else Icons.Default.Image, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
-                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            if (isVideo) Icons.Default.Movie else Icons.Default.Image,
+                            null,
+                            Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(5.dp))
                         Text(
                             if (isVideo) (row.durationMs?.let { fmtDuration(it) } ?: "Video") else "Ảnh",
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     if (admin) {
-                        // Chỉ Admin thấy đường dẫn thật; màn phát không bao giờ hiển thị.
-                        Text(row.relativePath, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            row.relativePath,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
-                    Spacer(Modifier.height(6.dp))
-                    TagChips(row.tagsCsv)
+                    if (!row.tagsCsv.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        TagChips(row.tagsCsv, max = 3)
+                    }
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (selectionMode) {
-                        Checkbox(checked = selected, onCheckedChange = { vm.toggleSelect(row.id) })
-                    } else {
+                if (!selectionMode) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         IconButton(onClick = { vm.toggleFavorite(row.id, row.isFavorite) }) {
                             Icon(
-                                if (row.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Yêu thích",
+                                if (row.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                "Yêu thích",
                                 tint = if (row.isFavorite) Color(0xFFE53935) else MaterialTheme.colorScheme.outline
                             )
                         }
-                        if (admin) IconButton(onClick = onEditAlias) { Icon(Icons.Default.Edit, "Sửa tên ảo", Modifier.size(20.dp)) }
+                        if (admin) {
+                            IconButton(onClick = onEditAlias) {
+                                Icon(Icons.Default.Edit, "Sửa tên ảo", Modifier.size(20.dp))
+                            }
+                        }
                     }
                 }
             }
