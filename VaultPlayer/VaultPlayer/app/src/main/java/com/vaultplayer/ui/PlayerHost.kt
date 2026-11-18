@@ -17,6 +17,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Label
@@ -26,7 +28,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -139,7 +140,12 @@ fun PlayerHost(vm: MainViewModel) {
     // Mục lỗi mở file dù nguồn còn đọc được => đã bị xóa: đánh dấu mất file và về danh sách.
     suspend fun checkGone(m: MediaEntry) { if (vm.markIfGone(m)) vm.screen.value = Screen.MAIN }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    val screenBackground = if (entry?.mediaType == "VIDEO") {
+        MaterialTheme.colorScheme.background
+    } else {
+        Color.Black
+    }
+    Box(Modifier.fillMaxSize().background(screenBackground)) {
         HorizontalPager(
             state = pager,
             userScrollEnabled = !zoomed,
@@ -163,6 +169,9 @@ fun PlayerHost(vm: MainViewModel) {
                             onNext = { go(1) },
                             canPrevious = pager.currentPage > 0,
                             canNext = pager.currentPage < q.lastIndex,
+                            isFavorite = fav,
+                            onFavorite = { vm.toggleFavorite(curId, fav); fav = !fav },
+                            onTags = { tagIds = listOf(curId) },
                             onDecoderModeChange = { decoderMode = it },
                             onEnded = { if (vm.slideshow) go(1) },
                             onFailed = { checkGone(m) })
@@ -171,74 +180,93 @@ fun PlayerHost(vm: MainViewModel) {
             }
         }
 
-        // Thanh trên: quay lại + tên ảo + tag
+        // Header dạng thẻ nổi, giữ tên ảo và các thao tác trong vùng chạm rõ ràng.
         AnimatedVisibility(controls, Modifier.align(Alignment.TopCenter)) {
-            Row(
-                Modifier.fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
-                    .statusBarsPadding().padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { vm.screen.value = Screen.MAIN }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Quay lại", tint = Color.White) }
-                Column(Modifier.weight(1f)) {
-                    Text(entry?.aliasName ?: "", color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    if (tags.isNotEmpty()) TagChips(tags.joinToString(",") { it.name }, max = 5)
-                }
-                Text("${pager.currentPage + 1}/${q.size}", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, "Thao tác khác", tint = Color.White)
-                    }
-                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text(if (fav) "Bỏ yêu thích" else "Yêu thích") },
-                            leadingIcon = { Icon(if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null) },
-                            onClick = {
-                                vm.toggleFavorite(curId, fav)
-                                fav = !fav
-                                menuExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Gắn tag") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, null) },
-                            onClick = { tagIds = listOf(curId); menuExpanded = false }
-                        )
-                        if (entry?.mediaType == "VIDEO") {
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Tự động · Media3, rồi VLC") },
-                                leadingIcon = { if (decoderMode == DecoderMode.AUTO) Icon(Icons.Default.Check, null) },
-                                onClick = { decoderMode = DecoderMode.AUTO; menuExpanded = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Phần cứng · VLC") },
-                                leadingIcon = { if (decoderMode == DecoderMode.HARDWARE) Icon(Icons.Default.Check, null) },
-                                onClick = { decoderMode = DecoderMode.HARDWARE; menuExpanded = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Phần mềm · tốn CPU") },
-                                leadingIcon = { if (decoderMode == DecoderMode.SOFTWARE) Icon(Icons.Default.Check, null) },
-                                onClick = { decoderMode = DecoderMode.SOFTWARE; menuExpanded = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (aspect == 0) "Khung hình: vừa khít" else "Khung hình: lấp đầy") },
-                                leadingIcon = { Icon(Icons.Default.AspectRatio, null) },
-                                onClick = { aspect = 1 - aspect; menuExpanded = false }
+            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    tonalElevation = 8.dp,
+                    shadowElevation = 10.dp
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { vm.screen.value = Screen.MAIN }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Quay lại", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                        Column(Modifier.weight(1f).padding(start = 4.dp)) {
+                            Text(entry?.aliasName ?: "", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                            if (tags.isNotEmpty()) TagChips(tags.joinToString(",") { it.name }, max = 3)
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            Text(
+                                "${pager.currentPage + 1}/${q.size}",
+                                Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelMedium
                             )
                         }
-                        DropdownMenuItem(
-                            text = { Text(if (rotLocked) "Mở khóa xoay" else "Khóa xoay") },
-                            leadingIcon = { Icon(if (rotLocked) Icons.Default.ScreenLockRotation else Icons.Default.ScreenRotation, null) },
-                            onClick = {
-                                rotLocked = !rotLocked
-                                activity?.requestedOrientation = if (rotLocked) ActivityInfo.SCREEN_ORIENTATION_LOCKED else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                                menuExpanded = false
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(Icons.Default.MoreVert, "Thao tác khác", tint = MaterialTheme.colorScheme.onSurface)
                             }
-                        )
+                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(if (fav) "Bỏ yêu thích" else "Yêu thích") },
+                                    leadingIcon = { Icon(if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null) },
+                                    onClick = {
+                                        vm.toggleFavorite(curId, fav)
+                                        fav = !fav
+                                        menuExpanded = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Gắn tag") },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, null) },
+                                    onClick = { tagIds = listOf(curId); menuExpanded = false }
+                                )
+                                if (entry?.mediaType == "VIDEO") {
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = { Text("Tự động · Media3, rồi VLC") },
+                                        leadingIcon = { if (decoderMode == DecoderMode.AUTO) Icon(Icons.Default.Check, null) },
+                                        onClick = { decoderMode = DecoderMode.AUTO; menuExpanded = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Phần cứng · VLC") },
+                                        leadingIcon = { if (decoderMode == DecoderMode.HARDWARE) Icon(Icons.Default.Check, null) },
+                                        onClick = { decoderMode = DecoderMode.HARDWARE; menuExpanded = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Phần mềm · tốn CPU") },
+                                        leadingIcon = { if (decoderMode == DecoderMode.SOFTWARE) Icon(Icons.Default.Check, null) },
+                                        onClick = { decoderMode = DecoderMode.SOFTWARE; menuExpanded = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(if (aspect == 0) "Khung hình: vừa khít" else "Khung hình: lấp đầy") },
+                                        leadingIcon = { Icon(Icons.Default.AspectRatio, null) },
+                                        onClick = { aspect = 1 - aspect; menuExpanded = false }
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(if (rotLocked) "Mở khóa xoay" else "Khóa xoay") },
+                                    leadingIcon = { Icon(if (rotLocked) Icons.Default.ScreenLockRotation else Icons.Default.ScreenRotation, null) },
+                                    onClick = {
+                                        rotLocked = !rotLocked
+                                        activity?.requestedOrientation = if (rotLocked) ActivityInfo.SCREEN_ORIENTATION_LOCKED else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                        menuExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
-                Spacer(Modifier.width(8.dp))
             }
         }
 
@@ -251,8 +279,9 @@ fun PlayerHost(vm: MainViewModel) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.extraLarge,
-                    color = Color.Black.copy(alpha = 0.76f),
-                    tonalElevation = 6.dp
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    tonalElevation = 8.dp,
+                    shadowElevation = 12.dp
                 ) {
                     Row(
                         Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -260,13 +289,13 @@ fun PlayerHost(vm: MainViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = { go(-1) }, enabled = pager.currentPage > 0) {
-                            Icon(Icons.Default.SkipPrevious, "Trước", tint = Color.White)
+                            Icon(Icons.Default.SkipPrevious, "Trước", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { vm.toggleFavorite(curId, fav); fav = !fav }) {
-                            Icon(if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Yêu thích", tint = if (fav) Color(0xFFFF5252) else Color.White)
+                            Icon(if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Yêu thích", tint = if (fav) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = { tagIds = listOf(curId) }) { Icon(Icons.AutoMirrored.Filled.Label, "Gắn tag", tint = Color.White) }
-                        IconButton(onClick = { go(1) }, enabled = pager.currentPage < q.lastIndex) { Icon(Icons.Default.SkipNext, "Tiếp theo", tint = Color.White) }
+                        IconButton(onClick = { tagIds = listOf(curId) }) { Icon(Icons.AutoMirrored.Filled.Label, "Gắn tag", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        IconButton(onClick = { go(1) }, enabled = pager.currentPage < q.lastIndex) { Icon(Icons.Default.SkipNext, "Tiếp theo", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }
@@ -279,7 +308,8 @@ fun PlayerHost(vm: MainViewModel) {
 private fun VideoPage(
     vm: MainViewModel, m: MediaEntry, controls: Boolean, decoderMode: DecoderMode, aspect: Int, bottomInset: Dp,
     onToggle: () -> Unit, onPrevious: () -> Unit, onNext: () -> Unit,
-    canPrevious: Boolean, canNext: Boolean, onDecoderModeChange: (DecoderMode) -> Unit,
+    canPrevious: Boolean, canNext: Boolean, isFavorite: Boolean,
+    onFavorite: () -> Unit, onTags: () -> Unit, onDecoderModeChange: (DecoderMode) -> Unit,
     onEnded: () -> Unit, onFailed: suspend () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -304,6 +334,9 @@ private fun VideoPage(
     var dragVal by remember(m.id) { mutableFloatStateOf(0f) }
     var showRestart by remember(m.id) { mutableStateOf(m.lastPositionMs > 5000) }
     val compact = isCompactWidth()
+    val portrait = LocalContext.current.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+    val safeTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val safeBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val currentBackend by rememberUpdatedState(backend)
     val currentMode by rememberUpdatedState(decoderMode)
     val currentOnEnded by rememberUpdatedState(onEnded)
@@ -465,7 +498,7 @@ private fun VideoPage(
     LaunchedEffect(error) { if (error) onFailed() }
     LaunchedEffect(showRestart) { if (showRestart) { delay(6000); showRestart = false } }
     LaunchedEffect(controls, playing, dragging) {
-        if (controls && playing && !dragging) {
+        if (controls && playing && !dragging && !portrait) {
             delay(3500)
             onToggle()
         }
@@ -491,6 +524,10 @@ private fun VideoPage(
     }
 
     Box(Modifier.fillMaxSize()) {
+        val videoViewport = Modifier.fillMaxSize().padding(
+            top = if (portrait && controls) safeTop + 64.dp else 0.dp,
+            bottom = if (portrait && controls) 214.dp + bottomInset + safeBottom else 0.dp
+        )
         if (backend == PlaybackBackend.MEDIA3) {
             AndroidView(
                 factory = { c ->
@@ -507,13 +544,13 @@ private fun VideoPage(
                     it.resizeMode = if (aspect == 1) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
                 },
                 onRelease = { it.player = null },
-                modifier = Modifier.fillMaxSize()
+                modifier = videoViewport
             )
         } else {
             AndroidView(
                 factory = { c -> VLCVideoLayout(c).also { vlc.attach(it); it.keepScreenOn = true } },
                 update = { vlc.attach(it) },
-                modifier = Modifier.fillMaxSize()
+                modifier = videoViewport
             )
         }
 
@@ -595,40 +632,114 @@ private fun VideoPage(
         AnimatedVisibility(
             controls,
             Modifier.align(Alignment.BottomCenter).padding(
-                bottom = bottomInset + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                bottom = bottomInset + safeBottom
             )
         ) {
-            val big = if (compact) 52.dp else 64.dp
+            val big = if (compact) 56.dp else 68.dp
+            val sideButton = if (compact) 40.dp else 44.dp
+            val sideGap = if (compact) 4.dp else 8.dp
+            val mainGap = if (compact) 10.dp else 14.dp
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = if (compact) 12.dp else 32.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = Color.Black.copy(alpha = 0.82f),
-                tonalElevation = 6.dp
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 22.dp, bottomEnd = 22.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                tonalElevation = 10.dp,
+                shadowElevation = 16.dp
             ) {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(fmtDuration(if (dragging) dragVal.toLong() else pos), color = Color.White, style = MaterialTheme.typography.labelMedium)
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    if (portrait) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (backend == PlaybackBackend.MEDIA3) "ĐANG PHÁT · MEDIA3" else "ĐANG PHÁT · VLC",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Text(
+                                    when (decoderMode) {
+                                        DecoderMode.AUTO -> "Tự động"
+                                        DecoderMode.HARDWARE -> "Giải mã phần cứng"
+                                        DecoderMode.SOFTWARE -> "Giải mã phần mềm"
+                                    },
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1
+                                )
+                            }
+                            IconButton(onClick = onFavorite) {
+                                Icon(
+                                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    "Yêu thích",
+                                    tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = onTags) {
+                                Icon(Icons.AutoMirrored.Filled.Label, "Gắn tag", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
                         val max = len.coerceAtLeast(1L).toFloat()
                         Slider(
                             value = (if (dragging) dragVal else pos.toFloat()).coerceIn(0f, max),
                             onValueChange = { dragging = true; dragVal = it },
                             onValueChangeFinished = { seekTo(dragVal.toLong()); dragging = false },
                             valueRange = 0f..max,
-                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        Text(fmtDuration(len), color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(fmtDuration(if (dragging) dragVal.toLong() else pos), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                            Text(fmtDuration(len), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        }
+                    } else {
+                        val max = len.coerceAtLeast(1L).toFloat()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(fmtDuration(if (dragging) dragVal.toLong() else pos), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                            Slider(
+                                value = (if (dragging) dragVal else pos.toFloat()).coerceIn(0f, max),
+                                onValueChange = { dragging = true; dragVal = it },
+                                onValueChangeFinished = { seekTo(dragVal.toLong()); dragging = false },
+                                valueRange = 0f..max,
+                                modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                            )
+                            Text(fmtDuration(len), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        }
                     }
+                    Spacer(Modifier.height(4.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onPrevious, enabled = canPrevious) {
-                            Icon(Icons.Default.SkipPrevious, "Trước", tint = Color.White.copy(alpha = if (canPrevious) 1f else 0.4f))
+                        IconButton(
+                            onClick = onPrevious, enabled = canPrevious,
+                            modifier = Modifier.size(sideButton).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                        ) {
+                            Icon(Icons.Default.SkipPrevious, "Trước", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canPrevious) 1f else 0.4f))
                         }
-                        IconButton(onClick = { seekBy(-10_000) }) { Icon(Icons.Default.Replay10, "Lùi 10 giây", tint = Color.White) }
-                        IconButton(onClick = { togglePlayback() }, modifier = Modifier.size(big)) {
-                            Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Tạm dừng" else "Phát", tint = Color.White, modifier = Modifier.size(big - 12.dp))
+                        Spacer(Modifier.width(sideGap))
+                        IconButton(
+                            onClick = { seekBy(-10_000) },
+                            modifier = Modifier.size(sideButton).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                        ) { Icon(Icons.Default.Replay10, "Lùi 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
+                        Spacer(Modifier.width(mainGap))
+                        IconButton(
+                            onClick = { togglePlayback() },
+                            modifier = Modifier.size(big).background(MaterialTheme.colorScheme.primary, CircleShape)
+                        ) {
+                            Icon(
+                                if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                if (playing) "Tạm dừng" else "Phát",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(big - 20.dp)
+                            )
                         }
-                        IconButton(onClick = { seekBy(10_000) }) { Icon(Icons.Default.Forward10, "Tiến 10 giây", tint = Color.White) }
-                        IconButton(onClick = onNext, enabled = canNext) {
-                            Icon(Icons.Default.SkipNext, "Tiếp theo", tint = Color.White.copy(alpha = if (canNext) 1f else 0.4f))
+                        Spacer(Modifier.width(mainGap))
+                        IconButton(
+                            onClick = { seekBy(10_000) },
+                            modifier = Modifier.size(sideButton).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                        ) { Icon(Icons.Default.Forward10, "Tiến 10 giây", tint = MaterialTheme.colorScheme.onSurface) }
+                        Spacer(Modifier.width(sideGap))
+                        IconButton(
+                            onClick = onNext, enabled = canNext,
+                            modifier = Modifier.size(sideButton).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                        ) {
+                            Icon(Icons.Default.SkipNext, "Tiếp theo", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (canNext) 1f else 0.4f))
                         }
                     }
                 }
