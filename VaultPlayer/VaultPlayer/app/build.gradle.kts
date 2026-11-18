@@ -13,19 +13,27 @@ android {
         applicationId = "com.vaultplayer"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = providers.gradleProperty("ciVersionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("ciVersionName").getOrElse("1.0.0")
         // Ba máy mục tiêu đều là arm64; bỏ ABI khác để APK nhẹ hơn.
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("vaultplayer-release.jks")
+            storePassword = "123456"
+            keyAlias = "vaultkey"
+            keyPassword = "123456"
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Ký bằng khóa debug để cài trực tiếp (sideload). Thay bằng khóa riêng nếu cần.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

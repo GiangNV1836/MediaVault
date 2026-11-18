@@ -1,10 +1,15 @@
 name: Build APK
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -13,6 +18,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -25,12 +32,42 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build Debug APK
-        working-directory: VaultPlayer/VaultPlayer
-        run: gradle assembleDebug --stacktrace
+      - name: Calculate version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER_NAME="${GITHUB_REF_NAME#v}"
+          else
+            LATEST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+            BASE_VERSION="${LATEST_TAG#v}"
+            if [[ -z "$LATEST_TAG" ]]; then
+              BASE_VERSION="1.0.0"
+            fi
+            VER_NAME="${BASE_VERSION}-build.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "VER_NAME=$VER_NAME" >> "$GITHUB_ENV"
+          echo "VER_CODE=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
 
-      - name: Upload APK artifact
+      - name: Build Debug and Release APKs
+        working-directory: VaultPlayer/VaultPlayer
+        run: gradle assembleDebug assembleRelease -PciVersionCode="$VER_CODE" -PciVersionName="$VER_NAME" --stacktrace
+
+      - name: Prepare APK files
+        run: |
+          mkdir -p artifacts
+          cp VaultPlayer/VaultPlayer/app/build/outputs/apk/debug/app-debug.apk \
+            "artifacts/VaultPlayer-v${VER_NAME}-DEBUG.apk"
+          cp VaultPlayer/VaultPlayer/app/build/outputs/apk/release/app-release.apk \
+            "artifacts/VaultPlayer-v${VER_NAME}-RELEASE.apk"
+
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: VaultPlayer-debug-apk
-          path: VaultPlayer/VaultPlayer/app/build/outputs/apk/debug/*.apk
+          name: VaultPlayer-v${{ env.VER_NAME }}-APKs
+          path: artifacts/*.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.apk
