@@ -22,7 +22,7 @@ data class MediaRow(
 
 data class TagCount(val id: Long, val name: String, val cnt: Int)
 
-data class AliasEntry(val id: Long, val mediaType: String)
+data class AliasEntry(val id: Long, val rootId: Long)
 
 data class BackupRow(
     val id: Long,
@@ -84,8 +84,8 @@ interface VaultDao {
     @Query("UPDATE media_entry SET lastPositionMs = :pos WHERE id = :id") suspend fun setPos(id: Long, pos: Long)
     @Query("UPDATE media_entry SET durationMs = :dur WHERE id = :id") suspend fun setDuration(id: Long, dur: Long)
     @Query("UPDATE media_entry SET aliasName = :alias WHERE id = :id") suspend fun setAlias(id: Long, alias: String)
-    @Query("SELECT id, mediaType FROM media_entry WHERE rootId = :rootId ORDER BY relativePath COLLATE NOCASE, pathKey")
-    suspend fun aliasEntries(rootId: Long): List<AliasEntry>
+    @Query("SELECT id, rootId FROM media_entry ORDER BY rootId, relativePath COLLATE NOCASE, pathKey, id")
+    suspend fun aliasEntries(): List<AliasEntry>
     @Query("SELECT COUNT(*) FROM media_entry WHERE aliasName = :alias") suspend fun aliasExists(alias: String): Int
     @Query("DELETE FROM media_entry WHERE id IN (:ids)") suspend fun deleteMediaIds(ids: List<Long>)
     @Query("DELETE FROM media_tag WHERE mediaId IN (:ids)") suspend fun deleteLinksOfMedia(ids: List<Long>)

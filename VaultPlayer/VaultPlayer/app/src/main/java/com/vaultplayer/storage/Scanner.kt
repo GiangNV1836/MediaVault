@@ -202,33 +202,39 @@ class Scanner(
 
     fun discardStaged() { staged.value = null }
 
-    private fun sourceCode(rootId: Long): String {
-        var value = (rootId - 1).coerceAtLeast(0)
+    private fun aliasGroupCode(groupIndex: Int): String {
+        var value = groupIndex + 1
         val code = StringBuilder()
-        while (value >= 0) {
-            code.append(('A'.code + (value % 26).toInt()).toChar())
-            value = value / 26 - 1
+        while (value > 0) {
+            val digit = (value - 1) % 26
+            code.append(('A'.code + digit).toChar())
+            value = (value - 1) / 26
         }
         return code.reverse().toString()
     }
 
-    private suspend fun renumberAliases(rootId: Long) {
-        val entries = dao.aliasEntries(rootId)
+    private suspend fun renumberAliases() {
+        val entries = dao.aliasEntries()
         if (entries.isEmpty()) return
         db.withTransaction {
             entries.forEachIndexed { index, entry ->
-                dao.setAlias(entry.id, "__mv_renumber_${rootId}_${index}_${UUID.randomUUID()}")
+                var temporary: String
+                do {
+                    temporary = "__mv_renumber_${index}_${UUID.randomUUID()}"
+                } while (dao.aliasExists(temporary) > 0)
+                dao.setAlias(entry.id, temporary)
             }
-            val code = sourceCode(rootId)
-            entries.forEachIndexed { index, entry ->
-                val base = (if (entry.mediaType == "VIDEO") "Clip " else "Ảnh ") + code + (index + 1)
-                var alias = base
-                var suffix = 2
-                while (dao.aliasExists(alias) > 0) {
-                    alias = "$base ($suffix)"
-                    suffix++
+            var groupIndex = -1
+            var currentRootId: Long? = null
+            var itemIndex = 0
+            entries.forEach { entry ->
+                if (entry.rootId != currentRootId) {
+                    currentRootId = entry.rootId
+                    groupIndex++
+                    itemIndex = 0
                 }
-                dao.setAlias(entry.id, alias)
+                itemIndex++
+                dao.setAlias(entry.id, "${aliasGroupCode(groupIndex)}$itemIndex")
             }
         }
     }
@@ -260,10 +266,10 @@ class Scanner(
             lastScanMs = SystemClock.elapsedRealtime() - t0,
             lastScanMode = st.mode
         ))
-        renumberAliases(rootId)
+        renumberAliases()
     }
 
-    /** Nhập PendingEntry -> MediaEntry theo lô (aliasName theo thứ tự đường dẫn), áp dụng dữ liệu từ backup nếu có. */
+    /** Nhập theo lô; sau cùng đánh lại tên ảo cho toàn thư viện, giữ các dữ liệu backup còn lại. */
     suspend fun importPending(root: SourceRoot, progress: (Int, Int) -> Unit) = withContext(LowPrio.dispatcher) {
         val total = dao.countPending(root.id)
         var done = 0
@@ -272,21 +278,19 @@ class Scanner(
             val batch = dao.pendingBatch(root.id, 500)
             if (batch.isEmpty()) break
             db.withTransaction {
-                var cur = (dao.counter("alias") ?: 1L).coerceAtLeast(1L)
                 val rows = ArrayList<MediaEntry>()
                 val stagings = ArrayList<RestoreStaging?>()
+                var provisionalNumber = dao.countMedia().toLong() + 1L
                 for (p in batch) {
                     val stg = dao.findStaging(root.volumeId, p.pathKey, p.fileSize)
-                    var alias = stg?.alias?.takeIf { it.isNotEmpty() && dao.aliasExists(it) == 0 && rows.none { r -> r.aliasName == it } }
-                    if (alias == null) {
-                        do {
-                            alias = (if (p.mediaType == "VIDEO") "Clip #" else "Ảnh #") + cur
-                            cur++
-                        } while (dao.aliasExists(alias!!) > 0 || rows.any { it.aliasName == alias })
-                    }
+                    var alias: String
+                    do {
+                        alias = "A$provisionalNumber"
+                        provisionalNumber++
+                    } while (dao.aliasExists(alias) > 0 || rows.any { it.aliasName == alias })
                     rows.add(MediaEntry(
                         rootId = root.id, mediaType = p.mediaType, relativePath = p.relativePath, pathKey = p.pathKey,
-                        dirKey = p.dirKey, documentId = p.documentId, aliasName = alias!!, isFavorite = stg?.isFavorite ?: false,
+                        dirKey = p.dirKey, documentId = p.documentId, aliasName = alias, isFavorite = stg?.isFavorite ?: false,
                         fileSize = p.fileSize, lastModified = p.lastModified, lastPositionMs = stg?.pos ?: 0L
                     ))
                     stagings.add(stg)
@@ -308,14 +312,13 @@ class Scanner(
                     dao.deleteStaging(stg.id)
                 }
                 dao.deletePending(batch.map { it.id })
-                dao.setCounter(Counter("alias", cur))
             }
             done += batch.size
             progress(done, total)
             delay(20)                      // nhường nhịp cho giao diện giữa các lô
         }
+        renumberAliases()
         val r = dao.root(root.id)
         if (r != null) dao.updateRoot(r.copy(pendingNewCount = dao.countPending(root.id), lastFileCount = dao.countActive(root.id)))
-        renumberAliases(root.id)
     }
 }
