@@ -32,11 +32,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun TagChip(name: String) {
+fun TagChip(name: String, compact: Boolean = false) {
     val c = tagColor(name)
     Surface(shape = RoundedCornerShape(50), color = c.copy(alpha = 0.16f)) {
         Text(name, color = c, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            modifier = Modifier.widthIn(max = if (compact) 64.dp else 112.dp).padding(horizontal = 8.dp, vertical = 2.dp))
     }
 }
 
@@ -120,8 +120,8 @@ fun MediaCard(
             onClick = { if (selectionMode) vm.toggleSelect(row.id) else onOpen() },
             onLongClick = { vm.toggleSelect(row.id) }
         ),
-        shape = RoundedCornerShape(22.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp, pressedElevation = 8.dp),
+        shape = RoundedCornerShape(14.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp, pressedElevation = 3.dp),
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
         )
@@ -145,28 +145,39 @@ fun MediaCard(
                 }
             }
             Row(
-                Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 12.dp),
+                Modifier.fillMaxWidth().padding(start = 10.dp, end = 6.dp, top = 7.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.Top
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(row.aliasName, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(4.dp))
+                    Text(row.aliasName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(3.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             if (isVideo) Icons.Default.Movie else Icons.Default.Image,
                             null,
-                            Modifier.size(16.dp),
+                            Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(Modifier.width(5.dp))
                         Text(
                             if (isVideo) (row.durationMs?.let { fmtDuration(it) } ?: "Video") else "Ảnh",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f)
                         )
+                        val tags = row.tagsCsv?.split(',')?.filter { it.isNotBlank() }.orEmpty()
+                        if (tags.isNotEmpty()) {
+                            Spacer(Modifier.width(6.dp))
+                            TagChip(tags.first(), compact = true)
+                            if (tags.size > 1) {
+                                Spacer(Modifier.width(3.dp))
+                                Text("+${tags.size - 1}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
                     }
                     if (admin) {
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(3.dp))
                         Text(
                             row.relativePath,
                             style = MaterialTheme.typography.labelSmall,
@@ -175,23 +186,23 @@ fun MediaCard(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    if (!row.tagsCsv.isNullOrBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        TagChips(row.tagsCsv, max = 3)
-                    }
                 }
                 if (!selectionMode) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(onClick = { vm.toggleFavorite(row.id, row.isFavorite) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { vm.toggleFavorite(row.id, row.isFavorite) },
+                            modifier = Modifier.size(36.dp)
+                        ) {
                             Icon(
                                 if (row.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 "Yêu thích",
-                                tint = if (row.isFavorite) Color(0xFFE53935) else MaterialTheme.colorScheme.outline
+                                tint = if (row.isFavorite) Color(0xFFE53935) else MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(19.dp)
                             )
                         }
                         if (admin) {
-                            IconButton(onClick = onEditAlias) {
-                                Icon(Icons.Default.Edit, "Sửa tên ảo", Modifier.size(20.dp))
+                            IconButton(onClick = onEditAlias, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Edit, "Sửa tên ảo", Modifier.size(18.dp))
                             }
                         }
                     }

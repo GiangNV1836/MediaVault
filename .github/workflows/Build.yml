@@ -60,11 +60,17 @@ jobs:
           cp VaultPlayer/VaultPlayer/app/build/outputs/apk/release/app-release.apk \
             "artifacts/VaultPlayer-v${VER_NAME}-RELEASE.apk"
 
-      - name: Upload APK artifacts
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v5
         with:
-          name: VaultPlayer-v${{ env.VER_NAME }}-APKs
-          path: artifacts/*.apk
+          name: VaultPlayer-v${{ env.VER_NAME }}-DEBUG
+          path: artifacts/*-DEBUG.apk
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: VaultPlayer-v${{ env.VER_NAME }}-RELEASE
+          path: artifacts/*-RELEASE.apk
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')

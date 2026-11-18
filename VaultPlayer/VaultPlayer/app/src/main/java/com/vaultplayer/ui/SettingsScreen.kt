@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vaultplayer.backup.BackupFile
@@ -79,10 +80,16 @@ private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Un
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(vm: MainViewModel) {
+fun SettingsScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) {
+    val context = LocalContext.current
     val v = vm.vault
     val prefs = v.prefs
     val admin by vm.admin.isAdmin.collectAsStateWithLifecycle()
+    val versionInfo = remember {
+        context.packageManager.getPackageInfo(context.packageName, 0).let {
+            "Version ${it.versionName ?: "?"} · Build ${it.longVersionCode}"
+        }
+    }
     val scope = rememberCoroutineScope()
     var showUnlock by remember { mutableStateOf(false) }
 
@@ -123,6 +130,14 @@ fun SettingsScreen(vm: MainViewModel) {
                     }
                 }
 
+                Section("Ứng dụng") {
+                    ListItem(
+                        headlineContent = { Text("VaultPlayer") },
+                        supportingContent = { Text(versionInfo) },
+                        leadingContent = { Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary) }
+                    )
+                }
+
                 if (!admin) {
                     Section("Quản trị") {
                         Text("Mở khóa Admin để thêm nguồn, quét, backup và các thiết lập bảo mật.", style = MaterialTheme.typography.bodySmall)
@@ -159,7 +174,7 @@ fun SettingsScreen(vm: MainViewModel) {
         }
     }
 
-    if (showUnlock) AdminUnlockDialog(v, false, {}) { showUnlock = false }
+    if (showUnlock) AdminUnlockDialog(v, canBio, onBio) { showUnlock = false }
     if (pinDlg) TextInputDialog("Đổi PIN Admin", "PIN mới (≥ 4 số, khác 1234)", "", "Lưu", secret = true, numeric = true, onDismiss = { pinDlg = false }) {
         scope.launch {
             val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { v.pin.set(it) }

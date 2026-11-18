@@ -75,7 +75,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-private enum class DecoderMode { AUTO, HARDWARE, SOFTWARE }
+private enum class DecoderMode { AUTO, ANDROID, VLC_HARDWARE, SOFTWARE }
 private enum class PlaybackBackend { MEDIA3, VLC }
 
 /**
@@ -234,17 +234,22 @@ fun PlayerHost(vm: MainViewModel) {
                                 if (entry?.mediaType == "VIDEO") {
                                     HorizontalDivider()
                                     DropdownMenuItem(
-                                        text = { Text("Tự động · Media3, rồi VLC") },
+                                        text = { Text("Tự động · Android, dự phòng VLC") },
                                         leadingIcon = { if (decoderMode == DecoderMode.AUTO) Icon(Icons.Default.Check, null) },
                                         onClick = { decoderMode = DecoderMode.AUTO; menuExpanded = false }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Phần cứng · VLC") },
-                                        leadingIcon = { if (decoderMode == DecoderMode.HARDWARE) Icon(Icons.Default.Check, null) },
-                                        onClick = { decoderMode = DecoderMode.HARDWARE; menuExpanded = false }
+                                        text = { Text("Android · MediaCodec") },
+                                        leadingIcon = { if (decoderMode == DecoderMode.ANDROID) Icon(Icons.Default.Check, null) },
+                                        onClick = { decoderMode = DecoderMode.ANDROID; menuExpanded = false }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Phần mềm · tốn CPU") },
+                                        text = { Text("LibVLC · tăng tốc phần cứng") },
+                                        leadingIcon = { if (decoderMode == DecoderMode.VLC_HARDWARE) Icon(Icons.Default.Check, null) },
+                                        onClick = { decoderMode = DecoderMode.VLC_HARDWARE; menuExpanded = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("LibVLC · giải mã phần mềm") },
                                         leadingIcon = { if (decoderMode == DecoderMode.SOFTWARE) Icon(Icons.Default.Check, null) },
                                         onClick = { decoderMode = DecoderMode.SOFTWARE; menuExpanded = false }
                                     )
@@ -362,10 +367,17 @@ private fun VideoPage(
 
     fun seekBy(delta: Long) = seekTo(currentPosition() + delta)
     fun togglePlayback() {
+        val replay = ended || (backend == PlaybackBackend.MEDIA3 && exo.playbackState == Player.STATE_ENDED)
         ended = false
         when (backend) {
-            PlaybackBackend.MEDIA3 -> if (exo.isPlaying) exo.pause() else exo.play()
-            PlaybackBackend.VLC -> vlc.toggle()
+            PlaybackBackend.MEDIA3 -> if (exo.isPlaying) exo.pause() else {
+                if (replay) exo.seekTo(0)
+                exo.play()
+            }
+            PlaybackBackend.VLC -> if (vlc.isPlaying) vlc.toggle() else if (replay) {
+                mediaUri?.let { vlc.start(it, 0L, softwareDecode = decoderMode == DecoderMode.SOFTWARE) }
+                    ?: vlc.toggle()
+            } else vlc.toggle()
         }
     }
 
@@ -397,7 +409,7 @@ private fun VideoPage(
             loading = false
             error = true
         } else {
-            backend = if (decoderMode == DecoderMode.AUTO) PlaybackBackend.MEDIA3 else PlaybackBackend.VLC
+            backend = if (decoderMode == DecoderMode.VLC_HARDWARE || decoderMode == DecoderMode.SOFTWARE) PlaybackBackend.VLC else PlaybackBackend.MEDIA3
         }
     }
 
@@ -410,7 +422,7 @@ private fun VideoPage(
             ended = false
             error = false
             loading = true
-            backend = if (decoderMode == DecoderMode.AUTO) PlaybackBackend.MEDIA3 else PlaybackBackend.VLC
+            backend = if (decoderMode == DecoderMode.VLC_HARDWARE || decoderMode == DecoderMode.SOFTWARE) PlaybackBackend.VLC else PlaybackBackend.MEDIA3
             return@LaunchedEffect
         }
         error = false
@@ -526,7 +538,7 @@ private fun VideoPage(
     Box(Modifier.fillMaxSize()) {
         val videoViewport = Modifier.fillMaxSize().padding(
             top = if (portrait && controls) safeTop + 64.dp else 0.dp,
-            bottom = if (portrait && controls) 214.dp + bottomInset + safeBottom else 0.dp
+            bottom = if (portrait && controls) 190.dp + bottomInset + safeBottom else 0.dp
         )
         if (backend == PlaybackBackend.MEDIA3) {
             AndroidView(
@@ -635,18 +647,18 @@ private fun VideoPage(
                 bottom = bottomInset + safeBottom
             )
         ) {
-            val big = if (compact) 56.dp else 68.dp
-            val sideButton = if (compact) 40.dp else 44.dp
+            val big = if (compact) 52.dp else 60.dp
+            val sideButton = if (compact) 36.dp else 40.dp
             val sideGap = if (compact) 4.dp else 8.dp
             val mainGap = if (compact) 10.dp else 14.dp
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = if (compact) 12.dp else 32.dp),
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 22.dp, bottomEnd = 22.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                tonalElevation = 10.dp,
-                shadowElevation = 16.dp
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                tonalElevation = 6.dp,
+                shadowElevation = 10.dp
             ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                     if (portrait) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -658,8 +670,9 @@ private fun VideoPage(
                                 Text(
                                     when (decoderMode) {
                                         DecoderMode.AUTO -> "Tự động"
-                                        DecoderMode.HARDWARE -> "Giải mã phần cứng"
-                                        DecoderMode.SOFTWARE -> "Giải mã phần mềm"
+                                        DecoderMode.ANDROID -> "MediaCodec · Android"
+                                        DecoderMode.VLC_HARDWARE -> "LibVLC · phần cứng"
+                                        DecoderMode.SOFTWARE -> "LibVLC · phần mềm"
                                     },
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodySmall,

@@ -11,7 +11,10 @@
 - Danh sách tag/playlist được throttle (tối đa 1 lần/0,4 giây) để không tính lại dồn dập khi nhập/quét hàng loạt.
 - PBKDF2 (PIN, mật khẩu backup) chạy ở luồng nền; khóa Keystore được lưu đệm; LibVLC dùng chung một thể hiện; mở file và khởi tạo media player trên luồng nền.
 - Player mặc định dùng Media3/Android MediaCodec; nếu phát sinh lỗi decoder thì thử LibVLC giải mã phần cứng tại vị trí hiện tại. Có thể chọn LibVLC phần cứng/phần mềm thủ công; không tự chuyển sang phần mềm theo timeout, dùng bộ đệm tệp 1000 ms.
-- Player có timeline, chuyển mục, chạm đúp để tua ±10 giây và nhấn giữ để phát nhanh 2×; các thao tác phụ nằm trong menu gọn. Quản lý tag có thể tạo tag chưa gắn nội dung.
+- Player có timeline, chuyển mục, chạm đúp để tua ±10 giây và nhấn giữ để phát nhanh 2×; có thể phát lại từ đầu sau khi video kết thúc.
+- Lưới media phân trang, chỉnh cỡ ô/độ phóng bằng thanh điều khiển và lưu lựa chọn; bộ lọc nằm trên một hàng cuộn ngang để không tự xuống dòng.
+- Playlist gồm playlist thủ công và playlist lọc theo tag; có thể chọn nhiều mục trong lưới để thêm/tạo playlist. Tag gắn cho media có danh sách tìm kiếm và chọn từ tag đã tồn tại.
+- Lần quét đầy đủ đầu tiên của nguồn mới sẽ tự nhập các mục tìm thấy sau khi quét thành công.
 - UI Material 3 dùng màu hệ thống, tab dưới trên màn hẹp/NavigationRail trên màn rộng, lưới và thẻ co giãn; các dialog thao tác có nút quay lại và danh sách có trạng thái tải/lỗi.
 - Gắn tag/yêu thích hàng loạt gói trong một transaction (một lần làm mới giao diện).
 - Giới hạn đã biết: một thư mục đơn chứa hàng trăm nghìn tệp sẽ tốn RAM khi quét lần đầu; bản backup rất lớn (hàng chục MB) tạm tốn RAM gấp 2-3 lần kích thước khi mã hóa; mở danh sách rất lớn có độ trễ ngắn khi dựng hàng đợi phát.

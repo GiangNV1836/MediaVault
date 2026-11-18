@@ -9,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -43,8 +45,8 @@ fun EmptyState(icon: ImageVector, text: String, hint: String? = null, modifier: 
 @Composable
 fun DialogBackTitle(title: String, onBack: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Quay lại") }
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+        IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Quay lại") }
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
     }
 }
 
@@ -161,6 +163,8 @@ fun AdminUnlockDialog(vault: Vault, canBio: Boolean, onBio: (() -> Unit) -> Unit
     var err by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val pinFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { pinFocus.requestFocus() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { DialogBackTitle("Mở khóa Admin", onDismiss) },
@@ -171,7 +175,7 @@ fun AdminUnlockDialog(vault: Vault, canBio: Boolean, onBio: (() -> Unit) -> Unit
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     isError = err != null, supportingText = err?.let { m -> ({ Text(m) }) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().focusRequester(pinFocus)
                 )
                 if (canBio) {
                     Spacer(Modifier.height(8.dp))

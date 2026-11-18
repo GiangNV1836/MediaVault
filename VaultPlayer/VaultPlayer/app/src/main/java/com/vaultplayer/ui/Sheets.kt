@@ -1,12 +1,9 @@
 package com.vaultplayer.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,10 +18,13 @@ import com.vaultplayer.data.TagCount
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TagSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
-    val tags by vm.tagCounts.collectAsStateWithLifecycle()
+    val allTags by vm.tagManagementCounts.collectAsStateWithLifecycle()
     var checked by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var text by remember { mutableStateOf("") }
+    var menuExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(ids) { checked = vm.commonTags(ids) }
+    val matchingTags = allTags.filter { text.isBlank() || it.name.contains(text.trim(), ignoreCase = true) }
+    val exactMatch = allTags.any { it.name.equals(text.trim(), ignoreCase = true) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetMaxWidth = 640.dp) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).navigationBarsPadding().imePadding()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -32,29 +32,74 @@ fun TagSheet(vm: MainViewModel, ids: List<Long>, onDismiss: () -> Unit) {
                 Text(if (ids.size > 1) "Gắn tag cho ${ids.size} mục" else "Gắn tag", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = text, onValueChange = { text = it }, singleLine = true, label = { Text("Tìm hoặc tạo tag") },
-                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
-                trailingIcon = {
-                    IconButton(enabled = text.isNotBlank(), onClick = {
-                        vm.createTag(text, ids) { t -> checked = checked + t.id }
-                        text = ""
-                    }) { Icon(Icons.Default.Add, "Tạo tag") }
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    tags.filter { text.isBlank() || it.name.contains(text.trim().lowercase()) }.forEach { t ->
-                        FilterChip(
-                            selected = t.id in checked,
+            Box {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it; menuExpanded = true },
+                    singleLine = true,
+                    label = { Text("Tìm tag đã tạo") },
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
+                    trailingIcon = {
+                        IconButton(onClick = { menuExpanded = !menuExpanded }) {
+                            Icon(if (menuExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, "Chọn tag")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)
+                ) {
+                    if (matchingTags.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("Chưa có tag phù hợp") },
+                            onClick = { menuExpanded = false },
+                            enabled = false
+                        )
+                    } else matchingTags.forEach { t ->
+                        DropdownMenuItem(
+                            text = { Text("${t.name} · ${t.cnt} mục") },
+                            leadingIcon = {
+                                Checkbox(checked = t.id in checked, onCheckedChange = null)
+                            },
                             onClick = {
                                 val on = t.id !in checked
                                 vm.setTag(ids, t.id, on)
                                 checked = if (on) checked + t.id else checked - t.id
+                                text = ""
+                                menuExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+            if (text.isNotBlank() && !exactMatch) {
+                TextButton(
+                    onClick = {
+                        vm.createTag(text, ids) { tag -> checked = checked + tag.id }
+                        text = ""
+                        menuExpanded = false
+                    },
+                    modifier = Modifier.align(Alignment.Start)
+                ) {
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Tạo “${text.trim()}”")
+                }
+            }
+            if (checked.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    allTags.filter { it.id in checked }.forEach { t ->
+                        InputChip(
+                            selected = true,
+                            onClick = {
+                                vm.setTag(ids, t.id, false)
+                                checked = checked - t.id
                             },
-                            label = { Text(t.name) }
+                            label = { Text(t.name) },
+                            trailingIcon = { Icon(Icons.Default.Close, "Gỡ tag", Modifier.size(16.dp)) }
                         )
                     }
                 }
@@ -127,10 +172,14 @@ fun TagManageDialog(vm: MainViewModel, admin: Boolean, onDismiss: () -> Unit) {
                 if (tags.isEmpty()) Text("Chưa có tag")
                 else LazyColumn(Modifier.heightIn(max = 300.dp)) {
                     items(tags, key = { it.id }) { t ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("${t.name} (${t.cnt})", Modifier.weight(1f))
-                            if (admin) IconButton(onClick = { ren = t }) { Icon(Icons.Default.Edit, "Đổi tên/gộp") }
-                            IconButton(onClick = { del = t }) { Icon(Icons.Default.Delete, "Xóa") }
+                        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${t.name} (${t.cnt})", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            if (admin) IconButton(onClick = { ren = t }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Edit, "Đổi tên/gộp", Modifier.size(18.dp))
+                            }
+                            IconButton(onClick = { del = t }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Delete, "Xóa", Modifier.size(18.dp))
+                            }
                         }
                     }
                 }

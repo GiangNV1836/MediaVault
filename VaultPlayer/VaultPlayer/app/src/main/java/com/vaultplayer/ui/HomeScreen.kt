@@ -6,7 +6,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
@@ -15,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
@@ -23,8 +26,8 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.vaultplayer.data.MediaRow
 
-private val TAB_LABELS = listOf("Tất cả", "Playlist theo Tag", "Yêu thích")
-private val COMPACT_TAB_LABELS = listOf("Tất cả", "Tag", "Yêu thích")
+private val TAB_LABELS = listOf("Tất cả", "Playlist", "Yêu thích")
+private val COMPACT_TAB_LABELS = listOf("Tất cả", "Playlist", "Yêu thích")
 private fun tabIcon(i: Int) = when (i) { 0 -> Icons.Default.VideoLibrary; 1 -> Icons.AutoMirrored.Filled.PlaylistPlay; else -> Icons.Default.Favorite }
 
 @Composable
@@ -39,7 +42,7 @@ fun MainScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
         when (screen) {
             Screen.MAIN -> HomeScreen(vm, canBio, onBio)
             Screen.PLAYER -> PlayerHost(vm)
-            Screen.SETTINGS -> SettingsScreen(vm)
+            Screen.SETTINGS -> SettingsScreen(vm, canBio, onBio)
         }
         if (!pinSet) SetPinDialog(onSet = { pin -> vm.vault.pin.set(pin) }, onDone = { pinSet = true })
     }
@@ -48,6 +51,12 @@ fun MainScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) {
+    val context = LocalContext.current
+    val versionInfo = remember {
+        context.packageManager.getPackageInfo(context.packageName, 0).let {
+            "v${it.versionName ?: "?"} · build ${it.longVersionCode}"
+        }
+    }
     val admin by vm.admin.isAdmin.collectAsStateWithLifecycle()
     val tab by vm.tab.collectAsStateWithLifecycle()
     val sel by vm.selection.collectAsStateWithLifecycle()
@@ -84,9 +93,10 @@ fun HomeScreen(vm: MainViewModel, canBio: Boolean, onBio: (() -> Unit) -> Unit) 
                         Column {
                             Text("VaultPlayer", style = MaterialTheme.typography.titleLarge)
                             Text(
-                                if (admin) "Chế độ quản trị" else "Thư viện riêng tư",
+                                "$versionInfo · ${if (admin) "Quản trị" else "Thư viện riêng tư"}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                                maxLines = 1
                             )
                         }
                     },
@@ -163,38 +173,71 @@ private fun MediaGrid(
     val shown by vm.shown.collectAsStateWithLifecycle()
     val autoShow = vm.vault.prefs.autoShowThumbs
     var aliasEdit by remember { mutableStateOf<MediaRow?>(null) }
-    if (items.itemCount == 0) {
-        when (items.loadState.refresh) {
-            is LoadState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            is LoadState.Error -> Column(
-                Modifier.fillMaxSize().padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(Icons.Default.CloudOff, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(40.dp))
-                Spacer(Modifier.height(8.dp))
-                Text("Không tải được danh sách", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { items.retry() }) { Text("Thử lại") }
-            }
-            else -> EmptyState(Icons.Default.VideoLibrary, emptyText)
-        }
-        return
-    }
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(300.dp),
-        contentPadding = PaddingValues(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        items(count = items.itemCount, key = items.itemKey { it.id }) { i ->
-            val row = items[i]
-            if (row != null) MediaCard(
-                vm, row, admin, selectionMode = sel.isNotEmpty(), selected = row.id in sel,
-                shown = row.id in shown, autoShow = autoShow, onOpen = { onOpen(row.id) }, onEditAlias = { aliasEdit = row }
+    var minCellDp by remember { mutableIntStateOf(vm.vault.prefs.gridMinCellDp) }
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.GridView, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(6.dp))
+            IconButton(
+                onClick = {
+                    minCellDp = (minCellDp - 20).coerceAtLeast(140)
+                    vm.vault.prefs.gridMinCellDp = minCellDp
+                },
+                enabled = minCellDp > 140
+            ) { Icon(Icons.Default.ZoomOut, "Thu nhỏ ô lưới") }
+            Slider(
+                value = minCellDp.toFloat(),
+                onValueChange = {
+                    minCellDp = it.toInt()
+                    vm.vault.prefs.gridMinCellDp = minCellDp
+                },
+                valueRange = 140f..300f,
+                steps = 7,
+                modifier = Modifier.weight(1f)
             )
+            IconButton(
+                onClick = {
+                    minCellDp = (minCellDp + 20).coerceAtMost(300)
+                    vm.vault.prefs.gridMinCellDp = minCellDp
+                },
+                enabled = minCellDp < 300
+            ) { Icon(Icons.Default.ZoomIn, "Phóng to ô lưới") }
+        }
+        if (items.itemCount == 0) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                when (items.loadState.refresh) {
+                    is LoadState.Loading -> CircularProgressIndicator()
+                    is LoadState.Error -> Column(
+                        Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.CloudOff, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("Không tải được danh sách", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { items.retry() }) { Text("Thử lại") }
+                    }
+                    else -> EmptyState(Icons.Default.VideoLibrary, emptyText)
+                }
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minCellDp.dp),
+                contentPadding = PaddingValues(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            ) {
+                items(count = items.itemCount, key = items.itemKey { it.id }) { i ->
+                    val row = items[i]
+                    if (row != null) MediaCard(
+                        vm, row, admin, selectionMode = sel.isNotEmpty(), selected = row.id in sel,
+                        shown = row.id in shown, autoShow = autoShow, onOpen = { onOpen(row.id) }, onEditAlias = { aliasEdit = row }
+                    )
+                }
+            }
         }
     }
     aliasEdit?.let { r -> TextInputDialog("Sửa tên ảo", "Tên ảo", r.aliasName, "Lưu", onDismiss = { aliasEdit = null }) { vm.editAlias(r.id, it); aliasEdit = null } }
@@ -227,18 +270,18 @@ fun AllTab(vm: MainViewModel) {
             ),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
         )
-        FlowRow(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Filter.entries.forEach {
                 FilterChip(
                     selected = f == it, onClick = { vm.filter.value = it },
-                    label = { Text(when (it) { Filter.ALL -> "Tất cả"; Filter.VIDEO -> "Video"; Filter.IMAGE -> "Ảnh"; Filter.UNTAGGED -> "Chưa gắn tag" }) }
+                    label = { Text(when (it) { Filter.ALL -> "Tất cả"; Filter.VIDEO -> "Video"; Filter.IMAGE -> "Ảnh"; Filter.UNTAGGED -> "Chưa gắn tag" }, maxLines = 1) }
                 )
             }
-            if (admin && pending > 0) AssistChip(onClick = { confirmImport = true }, label = { Text("Có $pending mục mới") }, leadingIcon = { Icon(Icons.Default.Add, null) })
+            if (admin && pending > 0) AssistChip(onClick = { confirmImport = true }, label = { Text("Có $pending mục mới", maxLines = 1) }, leadingIcon = { Icon(Icons.Default.Add, null) })
         }
         if (admin && running != null) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {

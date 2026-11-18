@@ -145,6 +145,7 @@ class SourceManager(
         if (!m.tryLock()) return                         // đang quét: gom lại, không quét chồng
         try {
             val root = dao.root(rootId) ?: return
+            val firstImportAfterScan = full && root.lastFullScanAt == 0L && dao.countActive(rootId) == 0
             val mode = if (full) "đầy đủ" else "nhanh"
             setProgress(ScanProgress(rootId, true, 0, mode))
             val out = try {
@@ -152,6 +153,12 @@ class SourceManager(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { ScanOutcome.Failed("Lỗi khi quét") }
             outcomes.update { it + (rootId to out) }
+            if (firstImportAfterScan && out is ScanOutcome.Done && dao.countPending(rootId) > 0) {
+                val latestRoot = dao.root(rootId) ?: return
+                scanner.importPending(latestRoot) { done, total ->
+                    setProgress(ScanProgress(rootId, true, done, "nhập $done/$total"))
+                }
+            }
         } finally {
             setProgress(ScanProgress(rootId, false))
             m.unlock()
